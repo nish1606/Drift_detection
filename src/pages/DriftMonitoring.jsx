@@ -17,6 +17,7 @@ export default function DriftMonitoring({ role }) {
   const [loading, setLoading] = useState(true)
   const [selectedFeature, setSelectedFeature] = useState('deviceVelocity')
   const [comparisonMix, setComparisonMix] = useState(58)
+  const [comparisonSplit, setComparisonSplit] = useState(60)
 
   useEffect(() => {
     let active = true
@@ -159,11 +160,13 @@ export default function DriftMonitoring({ role }) {
 
       {comparisonBins.length ? (
         <DistributionCompare
-          title="Before/after distribution comparison"
-          subtitle="Reference and current histograms slide together so analysts can see the shift, not just the score."
+          title="Baseline vs current split"
+          subtitle="Split one dataset into a baseline slice and a current slice to compare how the distribution has evolved."
           bins={comparisonBins}
           mix={comparisonMix}
           onMixChange={setComparisonMix}
+          split={comparisonSplit}
+          onSplitChange={setComparisonSplit}
         />
       ) : null}
 
