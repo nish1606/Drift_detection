@@ -33,7 +33,7 @@ pip install -r requirements.txt
 Train the fraud model and generate the saved artifacts:
 
 ```bash
-python backend/train.py
+python -m backend.train
 ```
 
 Start the FastAPI backend:
@@ -71,7 +71,7 @@ Use two terminals:
 1. Start the backend with `uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000`
 2. Start the frontend with `npm run dev -- --host 127.0.0.1 --port 5173`
 
-If you update the training data, rerun `python backend/train.py` so the model artifacts stay in sync.
+If you update the training data, rerun `python -m backend.train` so the model artifacts stay in sync.
 
 ## Main Backend Endpoints
 
