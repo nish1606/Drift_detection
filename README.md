@@ -202,15 +202,6 @@ Full interactive documentation is generated automatically by FastAPI at `/docs` 
 - **Containerization:** Docker, Docker Compose
 - **Linting:** oxlint
 
-## Recent Changes
-
-- Reorganized repository into `backend/`, `frontend/`, and `ml_model/` folders.
-- Moved model training code to `ml_model/`; training artifacts now write to `ml_model/artifacts/`.
-- Backend reads model artifacts from `ml_model/artifacts/` at startup/inference.
-- Removed dead/unused files: old `backend/train.py`, `backend/main.py`, `backend/data/creditcard.csv`, `backend/ingestion/`, `backend/orchestration/`, stale model artifacts, and `fraud_governance_system.egg-info/`.
-- Renamed `src/` to `frontend/` and updated all frontend entry paths.
-- Updated README, Dockerfile, docker-compose, and config paths to match the new structure.
-
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
