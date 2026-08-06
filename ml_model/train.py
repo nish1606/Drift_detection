@@ -5,12 +5,15 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import numpy as np
+import pandas as pd
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 
-from backend.model.evaluate import EvaluationResult, evaluate_predictions
+from ml_model.evaluate import EvaluationResult, evaluate_predictions
 from backend.preprocessing.feature_engineering import FeatureEngineer
 
 
@@ -24,7 +27,7 @@ class TrainingArtifact:
 
 
 class FraudModelTrainer:
-    def __init__(self, artifact_dir: str = "./artifacts") -> None:
+    def __init__(self, artifact_dir: str = "ml_model/artifacts") -> None:
         self.artifact_dir = Path(artifact_dir)
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
         self.feature_engineer = FeatureEngineer()
@@ -52,6 +55,18 @@ class FraudModelTrainer:
         evaluation = evaluate_predictions(test_y, probabilities)
         artifact_path = self.artifact_dir / f"{model_name}_{model_version}.joblib"
         joblib.dump(pipeline, artifact_path)
+
+        feature_names = pipeline.named_steps["vectorizer"].get_feature_names_out().tolist()
+        joblib.dump(feature_names, self.artifact_dir / "feature_columns.pkl")
+        joblib.dump({"model_version": model_version}, self.artifact_dir / "model_meta.pkl")
+
+        numeric_df = pd.DataFrame(engineered)
+        if "amount" in numeric_df.columns:
+            amounts = numeric_df["amount"].values
+            hist, bin_edges = np.histogram(amounts, bins=50)
+            probs = hist.astype(float) / hist.sum()
+            np.savez(self.artifact_dir / "train_stats.npz", bin_edges=bin_edges, probs=probs)
+
         return TrainingArtifact(
             model_name=model_name,
             model_version=model_version,

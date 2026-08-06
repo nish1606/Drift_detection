@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from typing import Any
+
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.deps import db_dep, decision_engine_dep, policy_engine_dep, risk_scorer_dep
 from backend.database import crud
+from backend.database.models import AuditLog
 from backend.governance.decision_engine import DecisionEngine
 from backend.governance.policy_engine import PolicyEngine
 from backend.governance.policy_loader import PolicyLoader
@@ -22,6 +27,44 @@ def list_policies(session: Session = Depends(db_dep)) -> list[PolicySchema]:
             crud.upsert_policy(session, loaded.config)
         policies = crud.list_policies(session)
     return [PolicySchema(name=policy.name, version=policy.version, policy_type=policy.policy_type, enabled=policy.enabled, config=policy.config) for policy in policies]
+
+
+@router.get("/policies/history")
+def policy_history(session: Session = Depends(db_dep), limit: int = 20) -> list[dict[str, Any]]:
+    rows = session.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
+    return [
+        {
+            "id": f"H-{index:03d}",
+            "policyName": row.resource_id,
+            "changedAt": row.created_at.isoformat(),
+            "changedBy": row.actor,
+            "changeSummary": row.payload.get("reason", f"{row.action} on {row.resource_type}"),
+        }
+        for index, row in enumerate(rows)
+    ]
+
+
+@router.post("/policies/draft")
+def save_draft(policy: dict[str, Any], session: Session = Depends(db_dep)) -> dict[str, Any]:
+    payload = {
+        "actor": policy.get("modifiedBy", "system"),
+        "action": "policy_draft",
+        "resource_type": "policy",
+        "resource_id": policy.get("name", "unknown"),
+        "status": "draft",
+        "payload": {
+            "reason": f"Published draft for {policy.get('name', 'unknown')}.",
+            "policy": policy,
+        },
+    }
+    crud.create_audit_log(session, payload)
+    return {
+        "id": f"H-{datetime.now(timezone.utc).timestamp():.0f}",
+        "name": policy.get("name"),
+        "lastModified": datetime.now(timezone.utc).isoformat(),
+        "modifiedBy": policy.get("modifiedBy", "system"),
+        "version": policy.get("version", "1.0"),
+    }
 
 
 @router.post("/policies/evaluate", response_model=list[dict[str, object]])

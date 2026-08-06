@@ -24,6 +24,7 @@ Instead of just classifying transactions as fraud or not, this system continuous
 - [How It Works](#how-it-works)
 - [Tech Stack](#tech-stack)
 - [Roadmap](#roadmap)
+- [Recent Changes](#recent-changes)
 - [License](#license)
 
 ---
@@ -46,42 +47,62 @@ Transaction → FastAPI /api/predict → Fraud model → Prediction + confidence
                      ▼
               Decision logged
                      │
-      ┌──────────────┼───────────────┐
-      ▼              ▼               ▼
-  Drift checks   Explainability   Risk scoring
- (/api/drift)                   (/api/governance)
-      └──────────────┬───────────────┘
-                      ▼
-            Governance policy engine
-                      │
-                      ▼
-        Alerts · Fallback · Freeze · Retrain flag
-                      │
-                      ▼
-        Dashboard & audit log (/api/monitoring)
+       ┌──────────────┼───────────────┐
+       ▼              ▼               ▼
+   Drift checks   Explainability   Risk scoring
+  (/api/drift)                   (/api/governance)
+       └──────────────┬───────────────┘
+                       ▼
+             Governance policy engine
+                       │
+                       ▼
+         Alerts · Fallback · Freeze · Retrain flag
+                       │
+                       ▼
+         Dashboard & audit log (/api/monitoring)
 ```
 
-The frontend (`src/`) is a thin client — it reads from these APIs and renders them; all decisioning logic lives in the backend so it can be reasoned about, tested, and audited independently of the UI.
+The frontend (`frontend/`) is a thin client — it reads from these APIs and renders them; all decisioning logic lives in the backend so it can be reasoned about, tested, and audited independently of the UI.
 
 ## Project Layout
 
 ```
 Drift_detection/
-├── src/                    # React/Vite frontend (dashboard)
 ├── backend/
 │   ├── app.py               # FastAPI application factory and API wiring
-│   ├── train.py              # trains the fraud model, writes model artifacts
-│   ├── data/
-│   │   └── creditcard.csv    # optional training dataset
-│   └── ...                   # governance, drift, and monitoring modules
-├── tests/                    # test suite
-├── public/                   # static frontend assets
+│   ├── api/                 # Routers (predict, drift, governance, monitoring, health)
+│   ├── core/                # Config, exceptions, middleware
+│   ├── database/            # SQLAlchemy models, CRUD, engine
+│   ├── detection/           # Drift detectors
+│   ├── explainability/      # SHAP/LIME services
+│   ├── governance/          # Policy engine, decision engine, risk scoring
+│   ├── logging/             # Logger, decision logger
+│   ├── model/               # Predictor, service, registry
+│   ├── monitoring/          # Metrics, dashboard, audit
+│   ├── preprocessing/       # Feature engineering
+│   ├── response/            # Alerting, freeze, retraining, review queue
+│   ├── schemas/             # Pydantic request/response models
+│   └── utils/               # Helpers, constants, validators
+├── frontend/
+│   ├── src/                 # React/Vite dashboard
+│   ├── package.json
+│   └── ...
+├── ml_model/
+│   ├── train.py             # Training script (writes artifacts to ml_model/artifacts/)
+│   ├── evaluate.py          # Evaluation utilities
+│   ├── artifacts/           # Generated model artifacts (ignored by git)
+│   └── data/                # Training data
+│       └── transactions_synthetic.csv
+├── tests/                   # test suite
+├── alembic/                 # database migrations
+├── alembic.ini              # Alembic config
 ├── docker-compose.yml
 ├── Dockerfile
-├── alembic.ini                # database migrations config
-├── requirements.txt            # root-level Python dependencies
-├── backend/requirements.txt     # backend-specific Python dependencies
-├── package.json                  # frontend dependencies
+├── requirements.txt         # root-level Python dependencies
+├── backend/requirements.txt # backend-specific Python dependencies
+├── package.json             # frontend dependencies
+├── vite.config.js
+├── .gitignore
 └── README.md
 ```
 
@@ -107,12 +128,6 @@ If you also want the root-level project dependencies:
 pip install -r requirements.txt
 ```
 
-Train the fraud model and generate the saved model artifacts:
-
-```bash
-python -m backend.train
-```
-
 Start the FastAPI backend:
 
 ```bash
@@ -130,13 +145,13 @@ http://127.0.0.1:8000/docs
 Install frontend dependencies:
 
 ```bash
-npm install
+cd frontend && npm install
 ```
 
 Run the Vite dev server:
 
 ```bash
-npm run dev -- --host 127.0.0.1 --port 5173
+cd frontend && npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
 Open the dashboard at:
@@ -150,9 +165,7 @@ http://127.0.0.1:5173/
 Use two terminals:
 
 1. **Backend:** `uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000`
-2. **Frontend:** `npm run dev -- --host 127.0.0.1 --port 5173`
-
-> If you update the training data (`backend/data/creditcard.csv`), rerun `python -m backend.train` so the model artifacts stay in sync with the backend.
+2. **Frontend:** `cd frontend && npm run dev -- --host 127.0.0.1 --port 5173`
 
 ### Run with Docker (optional)
 
@@ -178,17 +191,25 @@ Full interactive documentation is generated automatically by FastAPI at `/docs` 
 2. Every prediction is logged before any further processing happens, so nothing is lost even if a downstream step fails.
 3. In the background, drift detectors compare recent transaction patterns against the distribution the model was trained on, surfaced via `GET /api/drift`.
 4. A governance policy engine evaluates drift, confidence, and fairness signals against configurable thresholds (`GET /api/governance`), deciding whether to alert, recommend a retrain, or trigger a safer fallback.
-5. The dashboard (`src/`) polls `/api/monitoring`, `/api/governance`, and `/api/drift` to render a live view of model health, flagged transactions, and governance history for analysts and risk teams.
+5. The dashboard (`frontend/`) polls `/api/monitoring`, `/api/governance`, and `/api/drift` to render a live view of model health, flagged transactions, and governance history for analysts and risk teams.
 
 ## Tech Stack
 
 - **Frontend:** React, Vite
 - **Backend:** FastAPI, Uvicorn
-- **Model training:** scikit-learn (see `backend/train.py`)
+- **Model training:** scikit-learn (see `ml_model/train.py`)
 - **Database migrations:** Alembic
 - **Containerization:** Docker, Docker Compose
 - **Linting:** oxlint
 
+## Recent Changes
+
+- Reorganized repository into `backend/`, `frontend/`, and `ml_model/` folders.
+- Moved model training code to `ml_model/`; training artifacts now write to `ml_model/artifacts/`.
+- Backend reads model artifacts from `ml_model/artifacts/` at startup/inference.
+- Removed dead/unused files: old `backend/train.py`, `backend/main.py`, `backend/data/creditcard.csv`, `backend/ingestion/`, `backend/orchestration/`, stale model artifacts, and `fraud_governance_system.egg-info/`.
+- Renamed `src/` to `frontend/` and updated all frontend entry paths.
+- Updated README, Dockerfile, docker-compose, and config paths to match the new structure.
 
 ## License
 

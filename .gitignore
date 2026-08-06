@@ -24,6 +24,9 @@ env/
 # MLflow
 mlruns/
 
+# Model artifacts
+ml_model/artifacts/
+
 # VS Code
 .vscode/
 

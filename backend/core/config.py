@@ -13,7 +13,7 @@ class Settings(BaseModel):
     api_prefix: str = Field(default="/api/v1")
     database_url: str = Field(default="sqlite:///./fraud_governance.db")
     mlflow_tracking_uri: str = Field(default="file:./mlruns")
-    model_store_path: str = Field(default="./artifacts")
+    model_store_path: str = Field(default="ml_model/artifacts")
     policies_path: str = Field(default="backend/governance/policies")
     log_level: str = Field(default="INFO")
     request_timeout_seconds: int = Field(default=30, ge=1)
@@ -36,7 +36,7 @@ def get_settings() -> Settings:
         "api_prefix": os.getenv("API_PREFIX", "/api/v1"),
         "database_url": os.getenv("DATABASE_URL", "sqlite:///./fraud_governance.db"),
         "mlflow_tracking_uri": os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"),
-        "model_store_path": os.getenv("MODEL_STORE_PATH", "./artifacts"),
+        "model_store_path": os.getenv("MODEL_STORE_PATH", "ml_model/artifacts"),
         "policies_path": os.getenv("POLICIES_PATH", "backend/governance/policies"),
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
         "request_timeout_seconds": int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30")),

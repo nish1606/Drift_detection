@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import ShapBarChart from '../components/ShapBarChart'
 import TransactionRow from '../components/TransactionRow'
 import TooltipTerm from '../components/TooltipTerm'
-import { getTransactions, updateTransactionStatus } from '../mockApi'
+import { getTransactions, updateTransactionStatus } from '../api'
 import { formatCurrency, formatDateTime, formatPercent } from '../utils/formatters'
 
 const statusOptions = ['All', 'Pending', 'Approved', 'Declined', 'Escalated']

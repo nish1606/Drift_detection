@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.model.train import FraudModelTrainer
+from ml_model.train import FraudModelTrainer
 
 
 def test_training_produces_artifact(tmp_path):
