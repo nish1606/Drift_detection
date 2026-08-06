@@ -23,8 +23,6 @@ Instead of just classifying transactions as fraud or not, this system continuous
 - [API Reference](#api-reference)
 - [How It Works](#how-it-works)
 - [Tech Stack](#tech-stack)
-- [Roadmap](#roadmap)
-- [Recent Changes](#recent-changes)
 - [License](#license)
 
 ---
