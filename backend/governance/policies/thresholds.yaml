@@ -1,0 +1,15 @@
+name: thresholds
+version: "1.0"
+policy_type: threshold
+enabled: true
+rules:
+  - if:
+      risk_score_gte: 0.75
+    then:
+      action: block
+      reason: risk score too high
+  - if:
+      risk_score_gte: 0.45
+    then:
+      action: review
+      reason: risk score requires review

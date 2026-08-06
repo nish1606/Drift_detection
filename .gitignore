@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Database
+*.db
+
+# Environment
+.env
+
+# Testing
+.pytest_cache/
+.coverage
+
+# Logs
+*.log
+
+# MLflow
+mlruns/
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

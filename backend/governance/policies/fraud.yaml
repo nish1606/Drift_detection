@@ -1,0 +1,15 @@
+name: fraud
+version: "1.0"
+policy_type: threshold
+enabled: true
+rules:
+  - if:
+      probability_gte: 0.9
+    then:
+      action: block
+      reason: high model confidence fraud signal
+  - if:
+      probability_gte: 0.6
+    then:
+      action: review
+      reason: medium confidence fraud signal

@@ -1,0 +1,10 @@
+name: fairness
+version: "1.0"
+policy_type: fairness
+enabled: true
+rules:
+  - if:
+      fairness_gap_gte: 0.1
+    then:
+      action: review
+      reason: fairness gap exceeded tolerance
