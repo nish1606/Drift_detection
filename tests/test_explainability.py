@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from backend.explainability.lime_service import LimeService
 from backend.explainability.shap_service import ShapService
-from backend.model.train import FraudModelTrainer
+from ml_model.train import FraudModelTrainer
 
 
 def test_explainability_services_return_mappings(tmp_path):

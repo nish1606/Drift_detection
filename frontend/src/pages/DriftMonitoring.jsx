@@ -3,7 +3,7 @@ import DriftChart from '../components/DriftChart'
 import DistributionCompare from '../components/DistributionCompare'
 import TooltipTerm from '../components/TooltipTerm'
 import WhatIfSimulator from '../components/WhatIfSimulator'
-import { getDriftMetrics } from '../mockApi'
+import { getDriftHistory, postDriftStatistical } from '../api'
 import { formatDateTime } from '../utils/formatters'
 
 const featureOptions = [
@@ -24,7 +24,7 @@ export default function DriftMonitoring({ role }) {
 
     const load = async () => {
       setLoading(true)
-      const nextMetrics = await getDriftMetrics()
+      const nextMetrics = await getDriftHistory()
 
       if (!active) {
         return

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getAuditLog } from '../mockApi'
+import { getAuditLog } from '../api'
 import { createCsv, formatDateTime, formatPercent } from '../utils/formatters'
 
 const dateOptions = [

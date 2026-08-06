@@ -5,7 +5,7 @@ import ModelHealthGauge from '../components/ModelHealthGauge'
 import MetricCard from '../components/MetricCard'
 import StoryTimeline from '../components/StoryTimeline'
 import TooltipTerm from '../components/TooltipTerm'
-import { getDriftMetrics, getGovernanceActions, getStoryTimeline, getTransactions } from '../mockApi'
+import { getDriftHistory, getGovernanceActions, getStoryTimeline, getTransactions } from '../api'
 import { formatDateTime, formatPercent } from '../utils/formatters'
 
 const driftFeatureOptions = [
@@ -41,7 +41,7 @@ export default function Overview() {
       setLoading(true)
       const [nextTransactions, nextDriftMetrics, nextActions, nextStory] = await Promise.all([
         getTransactions(),
-        getDriftMetrics(),
+        getDriftHistory(),
         getGovernanceActions(),
         getStoryTimeline(),
       ])

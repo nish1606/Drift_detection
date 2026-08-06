@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 from backend.database import crud
 from backend.model.predict import FraudPredictor, PredictionResult
 from backend.model.registry import resolve_model_path
-from backend.model.train import FraudModelTrainer, TrainingArtifact
+from ml_model.train import FraudModelTrainer, TrainingArtifact
 
 
 @dataclass
 class FraudModelService:
     session: Session
-    artifact_dir: str = "./artifacts"
+    artifact_dir: str = "ml_model/artifacts"
 
     def _latest_model_path(self, model_name: str) -> str | None:
         try:

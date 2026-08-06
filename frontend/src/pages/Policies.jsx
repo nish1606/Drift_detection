@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import PolicyCard from '../components/PolicyCard'
-import { getPolicies, getPolicyHistory, savePolicyDraft } from '../mockApi'
+import { getPolicies, getPolicyHistory, savePolicyDraft } from '../api'
 import { formatLongDateTime } from '../utils/formatters'
 
 export default function Policies({ role }) {

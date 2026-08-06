@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.model.predict import FraudPredictor
-from backend.model.train import FraudModelTrainer
+from ml_model.train import FraudModelTrainer
 
 
 def test_prediction_uses_trained_model(tmp_path):
