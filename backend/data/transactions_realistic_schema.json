@@ -1,0 +1,18 @@
+{
+  "columns": [
+    "timestamp",
+    "amount",
+    "transaction_hour",
+    "is_foreign",
+    "velocity_1h",
+    "new_device",
+    "account_age_days",
+    "avg_amount_last_30d",
+    "merchant_category",
+    "geo_distance"
+  ],
+  "target": "isFraud",
+  "categorical": ["merchant_category"],
+  "numeric": ["amount", "velocity_1h", "account_age_days", "avg_amount_last_30d", "geo_distance"],
+  "boolean": ["is_foreign", "new_device"]
+}

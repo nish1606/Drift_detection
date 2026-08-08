@@ -1,0 +1,3 @@
+timestamp,amount,transaction_hour,is_foreign,velocity_1h,new_device,account_age_days,avg_amount_last_30d,merchant_category,geo_distance,isFraud
+0,100.0,12,0,1.0,0,30,50.0,credit,10.0,0
+1,200.0,14,1,2.0,0,60,80.0,debit,20.0,0
