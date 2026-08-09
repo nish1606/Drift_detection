@@ -113,6 +113,22 @@ Drift_detection/
 - Node.js 18+
 - `pip`
 
+## Dataset
+
+The repository does not include the raw training dataset because it exceeds GitHub's file size limits. Two data paths are supported:
+
+1. **Synthetic training data (included):** `ml_model/data/transactions_synthetic.csv` ships with the repo. It contains 20,000 simplified synthetic transactions and is sufficient for training the demo model.
+
+2. **IEEE-CIS Fraud Detection dataset (optional, not committed):** The raw Kaggle dataset (`train_transaction.csv` + `train_identity.csv`, ~1.35 GB) can be downloaded automatically:
+
+```bash
+python ml_model/download_data.py
+```
+
+This requires the Kaggle CLI (`pip install kaggle`) with your API credentials configured in `~/.kaggle/kaggle.json`. The downloaded files are placed in `ieee-fraud-detection/`, which is intentionally `.gitignore`d.
+
+If you only want to run the demo model, you can skip this step — the synthetic data is already present.
+
 ## Setup
 
 ### Backend Setup
