@@ -89,7 +89,7 @@ Drift_detection/
 │   ├── package.json
 │   └── ...
 ├── ml_model/
-│   ├── train.py             # Training script (writes artifacts to ml_model/artifacts/)
+│   ├── train.py             # Training script
 │   ├── evaluate.py          # Evaluation utilities
 │   ├── artifacts/           # Generated model artifacts (ignored by git)
 │   └── data/                # Training data
@@ -101,8 +101,8 @@ Drift_detection/
 ├── Dockerfile
 ├── requirements.txt         # root-level Python dependencies
 ├── backend/requirements.txt # backend-specific Python dependencies
-├── package.json             # frontend dependencies
-├── vite.config.js
+├── package.json             # frontend dependencies (in frontend/)
+├── vite.config.js           # Vite config (in frontend/)
 ├── .gitignore
 └── README.md
 ```
@@ -129,20 +129,17 @@ If you also want the root-level project dependencies:
 pip install -r requirements.txt
 ```
 
-### Database Setup
-
-Initialize the SQLite database and seed demo users:
+Start the FastAPI backend:
 
 ```bash
-cd backend
-python -m database.init_db
-python -m data.seed_users
+uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-This creates the database file and inserts three demo accounts:
-- **Analyst**: `analyst` / `analyst123`
-- **Risk Engineer**: `risk_engineer` / `risk123`
-- **Compliance**: `compliance` / `compliance123`
+Interactive API docs (Swagger UI) will be available at:
+
+```
+http://127.0.0.1:8000/docs
+```
 
 ### Frontend Setup
 
@@ -151,6 +148,25 @@ Install frontend dependencies:
 ```bash
 cd frontend && npm install
 ```
+
+Run the Vite dev server:
+
+```bash
+cd frontend && npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+### Database
+
+The database is initialized automatically when the backend starts. To seed demo users, run:
+
+```bash
+python -m backend.data.seed_users
+```
+
+This inserts three demo accounts:
+- **Analyst**: `analyst` / `analyst123`
+- **Risk Engineer**: `risk_engineer` / `risk123`
+- **Compliance**: `compliance` / `compliance123`
 
 ### Run the Whole Project
 
@@ -185,7 +201,9 @@ All endpoints are versioned under `/api/v1/...`.
 | `/api/v1/ready` | `GET` | No | Readiness check |
 | `/api/v1/predict` | `POST` | Yes | Score a transaction and return a fraud prediction with confidence, risk score, and SHAP explanations |
 | `/api/v1/predictions` | `GET` | Yes | Recent prediction history |
+| `/api/v1/predictions/{prediction_id}` | `GET` | Yes | Single prediction detail |
 | `/api/v1/policies` | `GET` | Yes | Governance policies |
+| `/api/v1/policies/evaluate` | `POST` | Yes | Evaluate policies against current data |
 | `/api/v1/dashboard` | `GET` | Yes | Aggregated dashboard metrics |
 | `/api/v1/audit` | `GET` | Yes | Audit log entries |
 | `/api/v1/summary` | `GET` | Yes | Drift summary, confidence trend, concept drift events |
@@ -194,6 +212,8 @@ All endpoints are versioned under `/api/v1/...`.
 | `/api/v1/drift/data-quality` | `POST` | Yes | Evaluate data quality metrics |
 | `/api/v1/drift/concept` | `POST` | Yes | Update concept drift detector with new error values |
 | `/api/v1/metrics` | `GET` | Yes | Protected metrics (Compliance / RiskEngineer only) |
+| `/api/v1/decision` | `POST` | Yes | Record a governance decision |
+| `/api/v1/risk-score` | `POST` | Yes | Compute risk score for a transaction |
 
 Full interactive documentation is generated automatically by FastAPI at `/docs` once the backend is running.
 
@@ -205,7 +225,11 @@ The API uses JWT bearer tokens. Include the token in the `Authorization` header:
 Authorization: Bearer <access_token>
 ```
 
-Tokens are obtained via `POST /api/v1/auth/login` and expire after 30 minutes.
+Tokens are obtained via `POST /api/v1/auth/login` and expire after 30 minutes. Most endpoints require authentication; only `/health`, `/ready`, `/auth/login`, and `/auth/register` are public.
+
+### Rate Limiting
+
+Authenticated API requests are rate-limited to **60 requests per minute per IP address**. Exceeding this limit returns HTTP `429 Too Many Requests`.
 
 ## Dashboard Pages
 
@@ -224,7 +248,7 @@ The React dashboard provides role-based views for analysts, risk engineers, and 
 1. A transaction is sent to `POST /api/v1/predict`, which returns a fraud prediction, confidence score, risk score, decision, and SHAP-based explanations in real time.
 2. Every prediction is logged to the database before any further processing happens, so nothing is lost even if a downstream step fails.
 3. In the background, drift detectors compare recent transaction patterns against the distribution the model was trained on, surfaced via `GET /api/v1/summary`.
-4. A governance policy engine evaluates drift, confidence, and fairness signals against configurable thresholds (`/api/v1/governance`), deciding whether to alert, recommend a retrain, or trigger a safer fallback.
+4. A governance policy engine evaluates drift, confidence, and fairness signals against configurable thresholds (`/api/v1/policies` and `/api/v1/policies/evaluate`), deciding whether to alert, recommend a retrain, or trigger a safer fallback.
 5. The dashboard (`frontend/`) fetches from `/api/v1/dashboard`, `/api/v1/predictions`, `/api/v1/audit`, and `/api/v1/summary` to render a live view of model health, flagged transactions, and governance history for analysts and risk teams.
 
 ## Tech Stack
@@ -236,6 +260,7 @@ The React dashboard provides role-based views for analysts, risk engineers, and 
 - **Authentication:** JWT (python-jose)
 - **Containerization:** Docker, Docker Compose
 - **Testing:** pytest
+
 
 ## License
 
