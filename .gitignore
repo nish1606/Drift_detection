@@ -26,6 +26,15 @@ mlruns/
 
 # Model artifacts
 ml_model/artifacts/
+*.pkl
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Data
+ieee-fraud-detection/
 
 # VS Code
 .vscode/
