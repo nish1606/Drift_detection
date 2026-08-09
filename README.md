@@ -58,7 +58,7 @@ Transaction → FastAPI /api/v1/predict → Fraud model → Prediction + confide
         ┌──────────────┼───────────────┐
         ▼              ▼               ▼
     Drift checks   Explainability   Risk scoring
-   (/api/v1/summary)              (/api/v1/governance)
+   (/api/v1/summary)              (/api/v1/policies, /api/v1/decision, /api/v1/risk-score)
         └──────────────┬───────────────┘
                         ▼
               Governance policy engine
@@ -313,7 +313,7 @@ The React dashboard provides role-based views for analysts, risk engineers, and 
 - **Frontend:** React, Vite, Chart.js
 - **Backend:** FastAPI, Uvicorn, SQLAlchemy
 - **Model:** scikit-learn pipeline with SHAP/LIME explainability
-- **Database:** SQLite with Alembic migrations
+- **Database:** SQLite (local dev) / PostgreSQL (Docker) with Alembic migrations
 - **Authentication:** JWT (python-jose)
 - **Containerization:** Docker, Docker Compose
 - **Testing:** pytest
