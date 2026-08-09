@@ -1,17 +1,17 @@
-from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from backend.database import crud, models
-from backend.database.session import get_db
+
 from backend.core.auth import (
     authenticate_user,
     create_access_token,
     get_current_active_user,
     get_password_hash,
-    pwd_context,
 )
-from backend.schemas.auth import Token, UserCreate, User as UserSchema
+from backend.database import models
+from backend.database.postgres import get_db
+from backend.schemas.auth import Token, UserCreate
+from backend.schemas.auth import User as UserSchema
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -30,7 +30,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     if db.query(models.User).filter(models.User.username == user_in.username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
-    user = models.User(username=user_in.username, hashed_password=get_password_hash(user_in.password), role=user_in.role)
+    user = models.User(username=user_in.username, display_name=user_in.username, password_hash=get_password_hash(user_in.password), role=user_in.role)
     db.add(user)
     db.commit()
     db.refresh(user)

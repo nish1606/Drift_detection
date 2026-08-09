@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from collections import deque
-from typing import Deque
+from dataclasses import dataclass, field
 
 
 @dataclass
 class ConceptDriftState:
-    window: Deque[float] = field(default_factory=lambda: deque(maxlen=200))
+    window: deque[float] = field(default_factory=lambda: deque(maxlen=200))
     baseline_mean: float = 0.0
     baseline_initialized: bool = False
 

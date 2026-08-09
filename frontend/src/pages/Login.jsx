@@ -1,24 +1,20 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import api from '../utils/api'
+import { login } from '../mockApi'
 
-export default function Login() {
+export default function Login({ onLogin }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const navigate = useNavigate()
 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
     try {
-      const res = await api.post('/auth/login', new URLSearchParams({ username, password }))
-      localStorage.setItem('access_token', res.data.access_token)
-      localStorage.setItem('role', res.data.role)
-      localStorage.setItem('username', res.data.username)
-      navigate('/')
+      await login(username, password)
+      onLogin?.()
     } catch (err) {
-      setError('Invalid credentials')
+      console.error('Login failed:', err)
+      setError(err.message || 'Invalid credentials')
     }
   }
 

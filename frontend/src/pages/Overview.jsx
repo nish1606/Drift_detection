@@ -5,6 +5,7 @@ import ModelHealthGauge from '../components/ModelHealthGauge'
 import MetricCard from '../components/MetricCard'
 import StoryTimeline from '../components/StoryTimeline'
 import TooltipTerm from '../components/TooltipTerm'
+import LastUpdated from '../components/LastUpdated'
 import { getDriftHistory, getGovernanceActions, getStoryTimeline, getTransactions } from '../api'
 import { formatDateTime, formatPercent } from '../utils/formatters'
 
@@ -26,35 +27,44 @@ function getDriftStatus(latestValue) {
   return { label: 'Normal', tone: 'success' }
 }
 
-export default function Overview() {
+export default function Overview({ role }) {
   const [transactions, setTransactions] = useState([])
   const [driftMetrics, setDriftMetrics] = useState(null)
   const [actions, setActions] = useState([])
   const [story, setStory] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedFeature, setSelectedFeature] = useState('transactionAmount')
+  const [lastRefreshed, setLastRefreshed] = useState(null)
 
   useEffect(() => {
     let active = true
 
     const load = async () => {
-      setLoading(true)
-      const [nextTransactions, nextDriftMetrics, nextActions, nextStory] = await Promise.all([
-        getTransactions(),
-        getDriftHistory(),
-        getGovernanceActions(),
-        getStoryTimeline(),
-      ])
+      try {
+        setLoading(true)
+        const [nextTransactions, nextDriftMetrics, nextActions, nextStory] = await Promise.all([
+          getTransactions(role),
+          getDriftHistory(role),
+          getGovernanceActions(role),
+          getStoryTimeline(role),
+        ])
 
-      if (!active) {
-        return
+        if (!active) {
+          return
+        }
+
+        setTransactions(nextTransactions)
+        setDriftMetrics(nextDriftMetrics)
+        setActions(nextActions)
+        setStory(nextStory)
+        setLastRefreshed(new Date().toISOString())
+      } catch (error) {
+        console.error('Overview load failed:', error)
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
       }
-
-      setTransactions(nextTransactions)
-      setDriftMetrics(nextDriftMetrics)
-      setActions(nextActions)
-      setStory(nextStory)
-      setLoading(false)
     }
 
     load()
@@ -64,7 +74,7 @@ export default function Overview() {
       active = false
       window.clearInterval(timer)
     }
-  }, [])
+  }, [role])
 
   const dashboardMetrics = useMemo(() => buildDashboardMetrics(transactions, driftMetrics, selectedFeature), [driftMetrics, selectedFeature, transactions])
 
@@ -111,6 +121,11 @@ export default function Overview() {
   return (
     <div className="space-y-6">
       <ModelHealthGauge score={dashboardMetrics.healthScore} summary={dashboardMetrics} />
+
+      <section className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Live dashboard</h2>
+        <LastUpdated lastRefreshed={lastRefreshed} />
+      </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <LiveTransactionStream transactions={transactions} />
@@ -180,27 +195,44 @@ export default function Overview() {
         </div>
 
         <div className="mt-4 grid gap-2">
-          {actions.map((action) => (
-            <article key={action.id} className="flex items-start justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-              <div>
-                <p className="font-medium text-slate-900 dark:text-slate-50">{action.action}</p>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{action.reason}</p>
-              </div>
-              <div className="text-right text-sm text-slate-500 dark:text-slate-400">
-                <p>{formatDateTime(action.timestamp)}</p>
-                <p className={`mt-1 font-semibold ${action.severity === 'Alert' ? 'text-rose-700 dark:text-rose-300' : action.severity === 'Watch' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-600 dark:text-slate-400'}`}>
-                  {action.severity}
-                </p>
-              </div>
-            </article>
-          ))}
+          {actions.map((action) => {
+            const isRollback = (action.action || '').toLowerCase().includes('rollback')
+            const isFreeze = (action.action || '').toLowerCase().includes('freeze')
+            const actionTone = isRollback ? 'rose' : isFreeze ? 'amber' : 'slate'
+            return (
+              <article key={action.id} className="flex items-start justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className={`font-medium ${actionTone === 'rose' ? 'text-rose-700 dark:text-rose-300' : actionTone === 'amber' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-slate-50'}`}>
+                      {action.action}
+                    </p>
+                    {isRollback || isFreeze ? (
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                        {action.triggeredBy || 'System policy'}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{action.reason}</p>
+                  {(isRollback || isFreeze) && action.modelVersion ? (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Target version: {action.modelVersion}</p>
+                  ) : null}
+                </div>
+                <div className="text-right text-sm text-slate-500 dark:text-slate-400">
+                  <p>{formatDateTime(action.timestamp)}</p>
+                  <p className={`mt-1 font-semibold ${action.severity === 'Alert' ? 'text-rose-700 dark:text-rose-300' : action.severity === 'Watch' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                    {action.severity}
+                  </p>
+                </div>
+              </article>
+            )
+          })}
         </div>
       </section>
     </div>
   )
 }
 
-function buildHealthScore(transactions, driftMetrics, fairnessPercent = 0) {
+function buildHealthScore(transactions, driftMetrics, fairnessPercent = 0, explainabilityLoss = 0) {
   if (!transactions.length || !driftMetrics) {
     return 70
   }
@@ -213,7 +245,12 @@ function buildHealthScore(transactions, driftMetrics, fairnessPercent = 0) {
   )
   const fairnessPenalty = Math.max(0, (100 - fairnessPercent) / 100)
   const fairnessRisk = Math.min(1, fairnessPenalty + flaggedShare * 0.35)
-  const score = confidenceScore * 100 * 0.5 + (1 - latestDrift) * 100 * 0.25 + (1 - fairnessRisk) * 100 * 0.25
+  const explainabilityRisk = Math.min(1, explainabilityLoss / 100)
+  const score =
+    confidenceScore * 100 * 0.4 +
+    (1 - latestDrift) * 100 * 0.2 +
+    (1 - fairnessRisk) * 100 * 0.2 +
+    (1 - explainabilityRisk) * 100 * 0.2
 
   return Math.max(0, Math.min(100, Math.round(score)))
 }
@@ -232,6 +269,8 @@ function buildDashboardMetrics(transactions, driftMetrics, selectedFeature) {
       confidence: 0,
       drift: 0,
       fairness: 0,
+      explainabilityLoss: 0,
+      explainabilityLossTone: 'violet',
       confidenceTone: 'emerald',
       healthScore: 70,
       healthSummary: 'The model is warming up and waiting for the first live measurements.',
@@ -248,7 +287,11 @@ function buildDashboardMetrics(transactions, driftMetrics, selectedFeature) {
   const driftStatusTone = driftStatus.tone
   const confidencePercent = Math.round(averageConfidence * 100)
 
-  const healthScore = buildHealthScore(transactions, driftMetrics, fairnessPercent)
+  const shapCoverage = transactions.filter((t) => (t.shapValues?.length ?? 0) > 0).length
+  const explainabilityLoss = Math.round(100 - (transactionsToday ? (shapCoverage / transactionsToday) * 100 : 0))
+  const explainabilityLossTone = explainabilityLoss > 40 ? 'rose' : explainabilityLoss > 20 ? 'amber' : 'violet'
+
+  const healthScore = buildHealthScore(transactions, driftMetrics, fairnessPercent, explainabilityLoss)
   const healthSummary = buildHealthSummary(transactions, driftMetrics, selectedFeature, fairnessPercent)
 
   return {
@@ -263,6 +306,8 @@ function buildDashboardMetrics(transactions, driftMetrics, selectedFeature) {
     confidence: confidencePercent,
     drift: Math.round(latestDriftValue * 100),
     fairness: fairnessPercent,
+    explainabilityLoss,
+    explainabilityLossTone,
     confidenceTone: confidencePercent < 60 ? 'amber' : 'emerald',
     healthScore,
     healthSummary,

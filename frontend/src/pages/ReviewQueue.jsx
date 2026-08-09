@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import ShapBarChart from '../components/ShapBarChart'
 import TransactionRow from '../components/TransactionRow'
 import TooltipTerm from '../components/TooltipTerm'
+import LastUpdated from '../components/LastUpdated'
 import { getTransactions, updateTransactionStatus } from '../api'
 import { formatCurrency, formatDateTime, formatPercent } from '../utils/formatters'
 
@@ -20,7 +21,7 @@ function matchesDateRange(timestamp, range) {
     '30d': 30 * 24 * 60 * 60 * 1000,
   }
 
-  return age <= thresholds[range]
+  return age >= 0 && age <= thresholds[range]
 }
 
 export default function ReviewQueue({ role }) {
@@ -31,35 +32,44 @@ export default function ReviewQueue({ role }) {
   const [showExplanation, setShowExplanation] = useState(false)
   const [dateRange, setDateRange] = useState('7d')
   const [statusFilter, setStatusFilter] = useState('All')
-  const [minimumConfidence, setMinimumConfidence] = useState(0.5)
+  const [minimumConfidence, setMinimumConfidence] = useState(0)
   const [savingStatus, setSavingStatus] = useState(false)
   const [confirmation, setConfirmation] = useState('')
+  const [lastRefreshed, setLastRefreshed] = useState(null)
   const previousIdsRef = useRef([])
 
   useEffect(() => {
     let active = true
 
     const load = async () => {
-      setLoading(true)
-      const nextTransactions = await getTransactions()
+      try {
+        setLoading(true)
+        const nextTransactions = await getTransactions(role)
 
-      if (!active) {
-        return
+        if (!active) {
+          return
+        }
+
+        const previousIds = previousIdsRef.current
+        const nextIds = nextTransactions.map((transaction) => transaction.id)
+        const arrivingIds = nextIds.filter((id) => !previousIds.includes(id))
+
+        if (arrivingIds.length) {
+          setNewlyAddedIds(arrivingIds)
+          window.setTimeout(() => setNewlyAddedIds((current) => current.filter((id) => !arrivingIds.includes(id))), 2200)
+        }
+
+        previousIdsRef.current = nextIds
+
+        setTransactions(nextTransactions)
+        setLastRefreshed(new Date().toISOString())
+      } catch (error) {
+        console.error('ReviewQueue load failed:', error)
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
       }
-
-      const previousIds = previousIdsRef.current
-      const nextIds = nextTransactions.map((transaction) => transaction.id)
-      const arrivingIds = nextIds.filter((id) => !previousIds.includes(id))
-
-      if (arrivingIds.length) {
-        setNewlyAddedIds(arrivingIds)
-        window.setTimeout(() => setNewlyAddedIds((current) => current.filter((id) => !arrivingIds.includes(id))), 2200)
-      }
-
-      previousIdsRef.current = nextIds
-
-      setTransactions(nextTransactions)
-      setLoading(false)
     }
 
     load()
@@ -69,7 +79,7 @@ export default function ReviewQueue({ role }) {
       active = false
       window.clearInterval(timer)
     }
-  }, [])
+  }, [role])
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((transaction) => {
@@ -130,9 +140,12 @@ export default function ReviewQueue({ role }) {
       </section>
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Flagged transactions</h2>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Click any row to inspect model features and decide the next action.</p>
+        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Flagged transactions</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Click any row to inspect model features and decide the next action.</p>
+          </div>
+          <LastUpdated lastRefreshed={lastRefreshed} />
         </div>
 
         {filteredTransactions.length ? (

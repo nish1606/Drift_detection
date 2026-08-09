@@ -8,11 +8,17 @@ from pydantic import BaseModel, ConfigDict, Field
 class PolicySchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    id: int
     name: str
     version: str = Field(default="1.0")
     policy_type: str = Field(default="threshold")
     enabled: bool = True
     config: dict[str, Any] = Field(default_factory=dict)
+    condition: str | None = None
+    action: str | None = None
+    escalation: str | None = None
+    lastModified: str | None = None
+    modifiedBy: str | None = None
 
 
 class RiskScoreRequest(BaseModel):

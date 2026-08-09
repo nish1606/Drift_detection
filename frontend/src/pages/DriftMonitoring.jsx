@@ -3,7 +3,8 @@ import DriftChart from '../components/DriftChart'
 import DistributionCompare from '../components/DistributionCompare'
 import TooltipTerm from '../components/TooltipTerm'
 import WhatIfSimulator from '../components/WhatIfSimulator'
-import { getDriftHistory, postDriftStatistical } from '../api'
+import LastUpdated from '../components/LastUpdated'
+import { getDriftHistory } from '../api'
 import { formatDateTime } from '../utils/formatters'
 
 const featureOptions = [
@@ -15,7 +16,7 @@ const featureOptions = [
 export default function DriftMonitoring({ role }) {
   const [metrics, setMetrics] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [selectedFeature, setSelectedFeature] = useState('deviceVelocity')
+  const [selectedFeature, setSelectedFeature] = useState('transactionAmount')
   const [comparisonMix, setComparisonMix] = useState(58)
   const [comparisonSplit, setComparisonSplit] = useState(60)
 
@@ -23,15 +24,22 @@ export default function DriftMonitoring({ role }) {
     let active = true
 
     const load = async () => {
-      setLoading(true)
-      const nextMetrics = await getDriftHistory()
+      try {
+        setLoading(true)
+        const nextMetrics = await getDriftHistory(role)
 
-      if (!active) {
-        return
+        if (!active) {
+          return
+        }
+
+        setMetrics(nextMetrics)
+      } catch (error) {
+        console.error('DriftMonitoring load failed:', error)
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
       }
-
-      setMetrics(nextMetrics)
-      setLoading(false)
     }
 
     load()
@@ -41,7 +49,7 @@ export default function DriftMonitoring({ role }) {
       active = false
       window.clearInterval(timer)
     }
-  }, [])
+  }, [role])
 
   const statisticalData = useMemo(() => {
     if (!metrics) {
@@ -75,7 +83,7 @@ export default function DriftMonitoring({ role }) {
     }
 
     return {
-      labels: metrics.timeLabels.map((value) => formatDateTime(value)),
+      labels: metrics.semanticDrift.map((point) => formatDateTime(point.timestamp)),
       datasets: [
         {
           label: 'Embedding distance',
@@ -96,6 +104,10 @@ export default function DriftMonitoring({ role }) {
   return (
     <div className="space-y-4">
       <section className="grid gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Drift monitoring</h2>
+          <LastUpdated />
+        </div>
         {statisticalData ? (
           <DriftChart
             title="Statistical drift"
@@ -106,7 +118,10 @@ export default function DriftMonitoring({ role }) {
             onSelectorChange={setSelectedFeature}
             options={{
               scales: {
-                y: { min: 0, max: 0.3 },
+                y: {
+                  min: 0,
+                  max: selectedFeature === 'deviceVelocity' ? 0.22 : 0.3,
+                },
               },
             }}
           />
@@ -151,7 +166,7 @@ export default function DriftMonitoring({ role }) {
             datasets={semanticData.datasets}
             options={{
               scales: {
-                y: { min: 0.05, max: 0.4 },
+                y: { min: 0, max: 0.5 },
               },
             }}
           />

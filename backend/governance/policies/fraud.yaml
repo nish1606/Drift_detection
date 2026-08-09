@@ -2,6 +2,9 @@ name: fraud
 version: "1.0"
 policy_type: threshold
 enabled: true
+condition: "probability_gte: 0.6"
+action: "review or block based on confidence tier"
+escalation: "Fraud Ops Lead"
 rules:
   - if:
       probability_gte: 0.9

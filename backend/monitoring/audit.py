@@ -15,12 +15,14 @@ class AuditService:
         return crud.create_audit_log(self.session, payload)
 
     def latest(self, limit: int = 50) -> list[dict[str, Any]]:
-        from backend.database.models import AuditLog
         from sqlalchemy import select
+
+        from backend.database.models import AuditLog
 
         rows = self.session.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
         return [
             {
+                "id": row.id,
                 "actor": row.actor,
                 "action": row.action,
                 "resource_type": row.resource_type,

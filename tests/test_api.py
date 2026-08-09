@@ -20,6 +20,7 @@ def test_predict_endpoint(client):
                 "new_device": 1,
             },
         },
+        headers={"X-Role": "Analyst"},
     )
     assert response.status_code == 200
     payload = response.json()

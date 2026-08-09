@@ -2,6 +2,9 @@ name: fairness
 version: "1.0"
 policy_type: fairness
 enabled: true
+condition: "fairness_gap_gte: 0.1"
+action: "review for parity violation"
+escalation: "Model Risk Governance"
 rules:
   - if:
       fairness_gap_gte: 0.1

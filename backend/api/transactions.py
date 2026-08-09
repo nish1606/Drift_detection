@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from backend.api.deps import db_dep
 from backend.database.models import PredictionRecord
-from backend.schemas.prediction import PredictionRequest, PredictionResponse
 
 router = APIRouter(tags=["transactions"])
 

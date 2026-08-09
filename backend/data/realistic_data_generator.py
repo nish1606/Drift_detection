@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+
 def load_schema():
     p = Path(__file__).with_name("transactions_realistic_schema.json")
     if p.exists():

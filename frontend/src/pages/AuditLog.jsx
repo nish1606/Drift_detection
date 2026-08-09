@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getAuditLog } from '../api'
+import LastUpdated from '../components/LastUpdated'
 import { createCsv, formatDateTime, formatPercent } from '../utils/formatters'
 
 const dateOptions = [
@@ -21,7 +22,7 @@ function matchesDateRange(timestamp, range) {
   return age <= thresholds[range]
 }
 
-export default function AuditLog() {
+export default function AuditLog({ role }) {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -34,15 +35,22 @@ export default function AuditLog() {
     let active = true
 
     const load = async () => {
-      setLoading(true)
-      const nextEntries = await getAuditLog()
+      try {
+        setLoading(true)
+        const nextEntries = await getAuditLog(role)
 
-      if (!active) {
-        return
+        if (!active) {
+          return
+        }
+
+        setEntries(nextEntries)
+      } catch (error) {
+        console.error('AuditLog load failed:', error)
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
       }
-
-      setEntries(nextEntries)
-      setLoading(false)
     }
 
     load()
@@ -50,7 +58,7 @@ export default function AuditLog() {
     return () => {
       active = false
     }
-  }, [])
+  }, [role])
 
   const versionOptions = useMemo(() => ['All', ...new Set(entries.map((entry) => entry.modelVersion))], [entries])
 
@@ -75,6 +83,7 @@ export default function AuditLog() {
       { label: 'Model version', getValue: (entry) => entry.modelVersion },
       { label: 'Prediction', getValue: (entry) => entry.prediction },
       { label: 'Confidence', getValue: (entry) => formatPercent(entry.confidence, 0) },
+      { label: 'Input features', getValue: (entry) => entry.inputFeatures || '—' },
       { label: 'Governance action', getValue: (entry) => entry.governanceAction },
       { label: 'Approver', getValue: (entry) => entry.approver },
     ])
@@ -96,7 +105,14 @@ export default function AuditLog() {
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-        <div className="grid gap-3 xl:grid-cols-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Audit log</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Compliance reporting log with search and export support.</p>
+          </div>
+          <LastUpdated />
+        </div>
+        <div className="mt-4 grid gap-3 xl:grid-cols-5">
           <label className="grid gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 xl:col-span-2">
             Search
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Decision ID, approver, action, reason" className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200" />
@@ -146,25 +162,33 @@ export default function AuditLog() {
         {filteredEntries.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100 text-sm dark:divide-slate-800">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                 <tr>
                   <th className="px-4 py-3">Decision ID</th>
                   <th className="px-4 py-3">Timestamp</th>
                   <th className="px-4 py-3">Model version</th>
                   <th className="px-4 py-3">Prediction</th>
                   <th className="px-4 py-3">Confidence</th>
+                  <th className="px-4 py-3">Input features</th>
                   <th className="px-4 py-3">Governance action</th>
                   <th className="px-4 py-3">Approver</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredEntries.map((entry) => (
-                  <tr key={entry.decisionId} className="border-b border-slate-100">
+                  <tr key={entry.id} className="border-b border-slate-100">
                     <td className="px-4 py-3 font-medium text-slate-900">{entry.decisionId}</td>
                     <td className="px-4 py-3 text-slate-600">{formatDateTime(entry.timestamp)}</td>
                     <td className="px-4 py-3 text-slate-700">{entry.modelVersion}</td>
                     <td className="px-4 py-3 text-slate-700">{entry.prediction}</td>
                     <td className="px-4 py-3 text-slate-700">{formatPercent(entry.confidence, 0)}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {entry.inputFeatures && entry.inputFeatures !== '—' ? (
+                        <span className="truncate block max-w-[12rem]">{entry.inputFeatures}</span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-700">{entry.governanceAction}</td>
                     <td className="px-4 py-3 text-slate-600">{entry.approver}</td>
                   </tr>

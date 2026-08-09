@@ -2,6 +2,9 @@ name: thresholds
 version: "1.0"
 policy_type: threshold
 enabled: true
+condition: "risk_score_gte: 0.45 or 0.75"
+action: "block or review based on risk tier"
+escalation: "Risk Engineer"
 rules:
   - if:
       risk_score_gte: 0.75

@@ -7,7 +7,7 @@ export default function StoryTimeline({ entries }) {
       </div>
       <div className="mt-4 space-y-3">
         {entries.map((entry) => (
-          <details key={`${entry.timestamp}-${entry.title}`} className="group rounded-xl border border-slate-100 bg-slate-50 p-3 open:bg-white dark:border-slate-800 dark:bg-slate-900 dark:open:bg-slate-950">
+          <details key={entry.id} className="group rounded-xl border border-slate-100 bg-slate-50 p-3 open:bg-white dark:border-slate-800 dark:bg-slate-900 dark:open:bg-slate-950">
             <summary className="cursor-pointer list-none">
               <div className="flex items-center justify-between gap-3">
                 <div>

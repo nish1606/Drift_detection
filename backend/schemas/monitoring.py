@@ -29,6 +29,7 @@ class AlertSchema(BaseModel):
 class AuditLogSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    id: int
     actor: str
     action: str
     resource_type: str

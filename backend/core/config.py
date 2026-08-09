@@ -23,6 +23,7 @@ class Settings(BaseModel):
     alert_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     retraining_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     allow_docs: bool = Field(default=True)
+    secret_key: str = Field(default="changeme-super-secret-key-for-jwt")
 
     def resolved_policies_path(self) -> Path:
         return Path(self.policies_path).resolve()

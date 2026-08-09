@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend.app import create_app
 from backend.core.config import Settings
+from backend.data.seed_users import seed_users
 from backend.database.postgres import get_session
 
 
@@ -22,7 +23,15 @@ def settings(tmp_path: Path) -> Settings:
 
 @pytest.fixture()
 def app(settings: Settings):
-    return create_app(settings)
+    app = create_app(settings)
+    db = get_session()
+    try:
+        seed_users(db)
+    except Exception:
+        pass
+    finally:
+        db.close()
+    return app
 
 
 @pytest.fixture()

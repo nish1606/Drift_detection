@@ -44,7 +44,7 @@ export default function ModelHealthGauge({ score, summary }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Model health</p>
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">Single score for confidence, drift, and fairness</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">Single score for confidence, drift, fairness, and explainability</h2>
           <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">{summary?.healthSummary ?? summary}</p>
         </div>
 
@@ -64,6 +64,7 @@ export default function ModelHealthGauge({ score, summary }) {
             <HealthChip label="Confidence" value={`${summary?.confidence ?? 0}%`} tone={summary?.confidenceTone ?? 'emerald'} />
             <HealthChip label="Drift" value={`${summary?.drift ?? 0}%`} tone={summary?.driftTone ?? 'amber'} />
             <HealthChip label="Fairness" value={`${summary?.fairness ?? 0}%`} tone={summary?.fairnessTone ?? 'slate'} />
+            <HealthChip label="Explainability loss" value={`${summary?.explainabilityLoss ?? 0}%`} tone={summary?.explainabilityLossTone ?? 'violet'} />
           </div>
         </div>
       </div>
@@ -77,6 +78,7 @@ function HealthChip({ label, value, tone }) {
     amber: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300',
     rose: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300',
     slate: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
+    violet: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/50 dark:text-violet-300',
   }
 
   return (

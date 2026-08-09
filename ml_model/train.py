@@ -61,11 +61,22 @@ class FraudModelTrainer:
         joblib.dump({"model_version": model_version}, self.artifact_dir / "model_meta.pkl")
 
         numeric_df = pd.DataFrame(engineered)
+        baseline = {}
         if "amount" in numeric_df.columns:
             amounts = numeric_df["amount"].values
             hist, bin_edges = np.histogram(amounts, bins=50)
             probs = hist.astype(float) / hist.sum()
             np.savez(self.artifact_dir / "train_stats.npz", bin_edges=bin_edges, probs=probs)
+
+        for column in numeric_df.columns:
+            values = numeric_df[column].values.astype(float)
+            baseline[column] = {
+                "mean": float(np.mean(values)),
+                "std": float(np.std(values)),
+                "min": float(np.min(values)),
+                "max": float(np.max(values)),
+            }
+        joblib.dump(baseline, self.artifact_dir / "baseline_stats.pkl")
 
         return TrainingArtifact(
             model_name=model_name,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 import numpy as np
 
@@ -11,7 +10,7 @@ class FeatureScaler:
     means: dict[str, float] = field(default_factory=dict)
     stds: dict[str, float] = field(default_factory=dict)
 
-    def fit(self, records: list[dict[str, float]]) -> "FeatureScaler":
+    def fit(self, records: list[dict[str, float]]) -> FeatureScaler:
         if not records:
             return self
         keys = sorted({key for record in records for key in record})

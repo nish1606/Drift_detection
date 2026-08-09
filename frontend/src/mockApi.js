@@ -14,12 +14,19 @@ export function getToken() {
 }
 
 export async function login(username, password) {
-  const form = new URLSearchParams({ username, password })
-  const res = await fetch('/api/v1/auth/login', { method: 'POST', body: form })
-  if (!res.ok) throw new Error('Invalid credentials')
+  const body = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+  const res = await fetch('http://localhost:8000/api/v1/auth/login', {
+    method: 'POST',
+    body: body,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Login failed: HTTP ${res.status}: ${text}`)
+  }
   const data = await res.json()
   localStorage.setItem(TOKEN_KEY, data.access_token)
-  localStorage.setItem(ROLE', data.role)
+  localStorage.setItem(ROLE_KEY, data.role)
   localStorage.setItem('username', data.username)
   return data
 }

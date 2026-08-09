@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import PolicyCard from '../components/PolicyCard'
+import LastUpdated from '../components/LastUpdated'
 import { getPolicies, getPolicyHistory, savePolicyDraft } from '../api'
 import { formatLongDateTime } from '../utils/formatters'
 
@@ -17,16 +18,23 @@ export default function Policies({ role }) {
     let active = true
 
     const load = async () => {
-      setLoading(true)
-      const [nextPolicies, nextHistory] = await Promise.all([getPolicies(), getPolicyHistory()])
+      try {
+        setLoading(true)
+        const [nextPolicies, nextHistory] = await Promise.all([getPolicies(role), getPolicyHistory(role)])
 
-      if (!active) {
-        return
+        if (!active) {
+          return
+        }
+
+        setPolicies(nextPolicies)
+        setHistory(nextHistory)
+      } catch (error) {
+        console.error('Policies load failed:', error)
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
       }
-
-      setPolicies(nextPolicies)
-      setHistory(nextHistory)
-      setLoading(false)
     }
 
     load()
@@ -34,7 +42,7 @@ export default function Policies({ role }) {
     return () => {
       active = false
     }
-  }, [])
+  }, [role])
 
   function beginEdit(policy) {
     setSelectedPolicy(policy)
@@ -48,9 +56,9 @@ export default function Policies({ role }) {
     }
 
     setSaving(true)
-    const updated = await savePolicyDraft({ ...draft, modifiedBy: role === 'Compliance' ? 'Current compliance user' : 'Risk engineer reviewer' })
+    const updated = await savePolicyDraft({ ...draft, modifiedBy: role === 'Compliance' ? 'Current compliance user' : 'Risk engineer reviewer' }, role)
     setPolicies((current) => current.map((policy) => (policy.id === updated.id ? updated : policy)))
-    const nextHistory = await getPolicyHistory()
+    const nextHistory = await getPolicyHistory(role)
     setHistory(nextHistory)
     setSaving(false)
     setSelectedPolicy(null)
@@ -66,6 +74,10 @@ export default function Policies({ role }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Policies</h2>
+        <LastUpdated />
+      </div>
       {!canEdit ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
           Read-only access for this role. Policy changes require compliance approval.
@@ -83,15 +95,15 @@ export default function Policies({ role }) {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Past policy changes, who made them, and why.</p>
         <div className="mt-4 space-y-3">
           {history.map((entry) => (
-            <article key={entry.id} className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+            <article key={entry.id || entry.name} className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-medium text-slate-900 dark:text-slate-50">{entry.policyName}</p>
-                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{entry.changeSummary}</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-50">{entry.policyName || entry.name}</p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{entry.changeSummary || entry.policy_type}</p>
                 </div>
                 <div className="text-right text-sm text-slate-500 dark:text-slate-400">
-                  <p>{entry.changedBy}</p>
-                  <p>{formatLongDateTime(entry.changedAt)}</p>
+                  <p>{entry.changedBy || entry.modifiedBy || 'system'}</p>
+                  <p>{entry.changedAt ? formatLongDateTime(entry.changedAt) : entry.lastModified ? formatLongDateTime(entry.lastModified) : '-'}</p>
                 </div>
               </div>
             </article>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -21,7 +21,7 @@ class RetrainingService:
                 "trigger_reason": trigger_reason,
                 "params": params or {},
                 "metrics": {},
-                "started_at": datetime.now(timezone.utc),
+                "started_at": datetime.now(UTC),
                 "finished_at": None,
             },
         )
