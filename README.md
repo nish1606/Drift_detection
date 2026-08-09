@@ -209,9 +209,42 @@ Log in with one of the seeded accounts above.
 
 ### Run with Docker (optional)
 
+The Docker setup runs the **backend API only** against a PostgreSQL database. The frontend is not containerized; run it separately with `npm run dev` as described above.
+
 ```bash
 docker-compose up --build
 ```
+
+This does the following:
+- Builds a Python image from `Dockerfile`
+- Starts a PostgreSQL 16 container
+- Starts the FastAPI backend on `http://localhost:8000`
+- Auto-creates database tables on first startup
+
+**After startup:**
+- API docs: `http://localhost:8000/docs`
+- Dashboard: Not served by Docker — use the Vite dev server instead
+
+**Manual steps required inside the container:**
+
+1. Seed demo users:
+   ```bash
+   docker-compose exec api python -m backend.data.seed_users
+   ```
+
+2. Train the model (or copy pre-trained artifacts into `ml_model/artifacts/`):
+   ```bash
+   docker-compose exec api python -m ml_model.train
+   ```
+
+**Environment variables:**
+- `DATABASE_URL` — set in `docker-compose.yml` to `postgresql+psycopg2://postgres:postgres@postgres:5432/fraud_governance`
+- `ENVIRONMENT` — set to `production` in `docker-compose.yml`
+
+**Troubleshooting:**
+- If the API crashes on startup with a PostgreSQL driver error, install `psycopg2-binary` in `backend/requirements.txt` and rebuild.
+- If the dashboard loads but shows no data, the database may not be seeded — run the seed command above.
+- If predictions return rule-based fallback scores instead of model outputs, no trained model artifacts are present — train the model or copy artifacts into `ml_model/artifacts/`.
 
 ## API Reference
 
