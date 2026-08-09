@@ -8,6 +8,10 @@ Instead of just classifying transactions as fraud or not, this system continuous
   <em>React/Vite dashboard · FastAPI backend · Drift-aware fraud detection model</em>
 </p>
 
+<p align="center">
+  <em>Final-year engineering major project</em>
+</p>
+
 ---
 
 ## Table of Contents
@@ -16,15 +20,19 @@ Instead of just classifying transactions as fraud or not, this system continuous
 - [Architecture](#architecture)
 - [Project Layout](#project-layout)
 - [Requirements](#requirements)
+- [Dataset](#dataset)
 - [Setup](#setup)
   - [Backend](#backend-setup)
   - [Frontend](#frontend-setup)
   - [Database](#database-setup)
   - [Run the Whole Project](#run-the-whole-project)
+  - [Run with Docker (optional)](#run-with-docker-optional)
 - [API Reference](#api-reference)
 - [Dashboard Pages](#dashboard-pages)
 - [How It Works](#how-it-works)
 - [Tech Stack](#tech-stack)
+- [Testing](#testing)
+- [Known Limitations](#known-limitations)
 - [License](#license)
 
 ---
@@ -276,6 +284,25 @@ The React dashboard provides role-based views for analysts, risk engineers, and 
 - **Authentication:** JWT (python-jose)
 - **Containerization:** Docker, Docker Compose
 - **Testing:** pytest
+
+## Testing
+
+Run the test suite with:
+
+```bash
+pytest tests/
+```
+
+The suite covers API endpoints, authentication, drift detection, explainability, monitoring, policy engine, prediction pipeline, response handling, and training artifact generation.
+
+## Known Limitations
+
+- **CORS** is currently restricted to localhost development ports only and is not configured for external deployment.
+- **Rate limiting** is per-IP, not per-token, so it is not suitable for multi-tenant production use as-is.
+- **Authorization** uses role-based access control, but there is no scoped API key system — all authenticated users have equal access to all endpoints.
+- **Explainability Loss** currently measures SHAP coverage only (presence of explanations), not explanation quality or stability over time.
+
+These are intentionally scoped out for this stage of the project and noted here for transparency.
 
 
 ## License
