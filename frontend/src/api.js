@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8000/api/v1'
+const API_BASE = '/api/v1'
 
 async function request(path, options = {}, role = 'Analyst') {
   const token = localStorage.getItem('access_token')

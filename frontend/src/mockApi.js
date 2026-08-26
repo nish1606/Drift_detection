@@ -15,7 +15,7 @@ export function getToken() {
 
 export async function login(username, password) {
   const body = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
-  const res = await fetch('http://localhost:8000/api/v1/auth/login', {
+  const res = await fetch('/api/v1/auth/login', {
     method: 'POST',
     body: body,
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
