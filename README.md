@@ -51,23 +51,24 @@ Fraud patterns change constantly, but most fraud-detection systems treat the mod
 
 ```
 Transaction → FastAPI /api/v1/predict → Fraud model → Prediction + confidence
-                      │
-                      ▼
-               Decision logged
-                      │
-        ┌──────────────┼───────────────┐
-        ▼              ▼               ▼
-    Drift checks   Explainability   Risk scoring
-   (/api/v1/summary)              (/api/v1/policies, /api/v1/decision, /api/v1/risk-score)
-        └──────────────┬───────────────┘
-                        ▼
-              Governance policy engine
-                        │
-                        ▼
-          Alerts · Fallback · Freeze · Retrain flag
-                        │
-                        ▼
-          Dashboard & audit log (/api/v1/monitoring)
+                       │
+                       ▼
+                Decision logged (background task)
+                       │
+         ┌──────────────┼───────────────┐
+         ▼              ▼               ▼
+     Drift checks   Explainability   Risk scoring
+    (/api/v1/summary) (/api/v1/explainability/grad-cam) (/api/v1/risk-score)
+         └──────────────┬───────────────┘
+                         ▼
+               Governance policy engine
+               (/api/v1/policies, /api/v1/decision)
+                         │
+                         ▼
+           Alerts · Fallback · Freeze · Retrain flag
+                         │
+                         ▼
+           Dashboard & audit log (/api/v1/dashboard, /api/v1/audit)
 ```
 
 The frontend (`frontend/`) is a thin client — it reads from these APIs and renders them; all decisioning logic lives in the backend so it can be reasoned about, tested, and audited independently of the UI.
@@ -78,11 +79,11 @@ The frontend (`frontend/`) is a thin client — it reads from these APIs and ren
 Drift_detection/
 ├── backend/
 │   ├── app.py               # FastAPI application factory and API wiring
-│   ├── api/                 # Routers (predict, drift, governance, monitoring, health, auth)
+│   ├── api/                 # Routers (auth, predict, predictions, transactions, drift, governance, monitoring, health)
 │   ├── core/                # Config, exceptions, middleware, auth
 │   ├── database/            # SQLAlchemy models, CRUD, engine
 │   ├── detection/           # Drift detectors (statistical, semantic, concept)
-│   ├── explainability/      # SHAP/LIME services
+│   ├── explainability/      # Grad-CAM attribution service
 │   ├── governance/          # Policy engine, decision engine, risk scoring
 │   ├── logging/             # Logger, decision logger
 │   ├── model/               # Predictor, service, registry
@@ -101,7 +102,15 @@ Drift_detection/
 │   ├── evaluate.py          # Evaluation utilities
 │   ├── artifacts/           # Generated model artifacts (ignored by git)
 │   └── data/                # Training data
-│       └── transactions_synthetic.csv
+│       └── transactions_realistic.csv
+├── backend/data/
+│   ├── transactions_realistic.csv   # Synthetic training data (20k rows)
+│   └── mendeley/                     # Reference datasets for drift comparison
+│       ├── harmonized_5000_temporally_matched.csv
+│       ├── IEEE_selected_2000_final.csv
+│       ├── PaySim_selected_2016_temporally_matched.csv
+│       ├── ULB_selected_984_temporally_matched.csv
+│       └── train_random_80.csv / test_random_20.csv
 ├── tests/                   # test suite
 ├── alembic/                 # database migrations
 ├── alembic.ini              # Alembic config
@@ -123,19 +132,19 @@ Drift_detection/
 
 ## Dataset
 
-The repository does not include the raw training dataset because it exceeds GitHub's file size limits. Two data paths are supported:
+The repository includes synthetic training data and reference datasets for drift comparison:
 
-1. **Synthetic training data (included):** `ml_model/data/transactions_synthetic.csv` ships with the repo. It contains 20,000 simplified synthetic transactions and is sufficient for training the demo model.
+- **Synthetic training data (included):** `backend/data/transactions_realistic.csv` ships with the repo. It contains 20,000 transactions with a 2.81% fraud class imbalance. This is the dataset the current `fraud_model.pkl` was trained on.
 
-2. **IEEE-CIS Fraud Detection dataset (optional, not committed):** The raw Kaggle dataset (`train_transaction.csv` + `train_identity.csv`, ~1.35 GB) can be downloaded automatically:
+- **Reference datasets for drift comparison (included):** `backend/data/mendeley/` contains temporally-matched subsets from multiple real-world fraud datasets (IEEE-CIS, PaySim, ULB). These are used by the `/datasets/compare` endpoint to simulate and measure drift against the baseline training distribution. They are **not** used for model training.
+
+If you want to experiment with additional training data, the original IEEE-CIS Fraud Detection dataset can be downloaded automatically:
 
 ```bash
 python ml_model/download_data.py
 ```
 
 This requires the Kaggle CLI (`pip install kaggle`) with your API credentials configured in `~/.kaggle/kaggle.json`. The downloaded files are placed in `ieee-fraud-detection/`, which is intentionally `.gitignore`d.
-
-If you only want to run the demo model, you can skip this step — the synthetic data is already present.
 
 ## Setup
 
@@ -207,6 +216,8 @@ http://127.0.0.1:5173/
 
 Log in with one of the seeded accounts above.
 
+**Note for Windows users:** The Vite dev proxy targets `127.0.0.1:8000` to avoid IPv6 resolution delays with `localhost`. If you change the backend host, update `frontend/vite.config.js` accordingly.
+
 ### Run with Docker (optional)
 
 The Docker setup runs the **backend API only** against a PostgreSQL database. The frontend is not containerized; run it separately with `npm run dev` as described above.
@@ -259,8 +270,15 @@ All endpoints are versioned under `/api/v1/...`.
 | `/api/v1/predict` | `POST` | Yes | Score a transaction and return a fraud prediction with confidence, risk score, and SHAP explanations |
 | `/api/v1/predictions` | `GET` | Yes | Recent prediction history |
 | `/api/v1/predictions/{prediction_id}` | `GET` | Yes | Single prediction detail |
+| `/api/v1/transactions` | `GET` | Yes | Recent transactions with mapped status and SHAP values |
+| `/api/v1/transactions/{request_id}/status` | `POST` | Yes | Update transaction review status |
 | `/api/v1/policies` | `GET` | Yes | Governance policies |
+| `/api/v1/policies/history` | `GET` | Yes | Policy change history |
+| `/api/v1/policies/draft` | `POST` | Yes | Save a policy draft |
 | `/api/v1/policies/evaluate` | `POST` | Yes | Evaluate policies against current data |
+| `/api/v1/datasets` | `GET` | Yes | List available reference datasets |
+| `/api/v1/datasets/compare` | `POST` | Yes | Compare two datasets for drift |
+| `/api/v1/explainability/grad-cam` | `POST` | Yes | Tabular Grad-CAM attribution for a transaction |
 | `/api/v1/dashboard` | `GET` | Yes | Aggregated dashboard metrics |
 | `/api/v1/audit` | `GET` | Yes | Audit log entries |
 | `/api/v1/summary` | `GET` | Yes | Drift summary, confidence trend, concept drift events |
@@ -271,6 +289,13 @@ All endpoints are versioned under `/api/v1/...`.
 | `/api/v1/metrics` | `GET` | Yes | Protected metrics (Compliance / RiskEngineer only) |
 | `/api/v1/decision` | `POST` | Yes | Record a governance decision |
 | `/api/v1/risk-score` | `POST` | Yes | Compute risk score for a transaction |
+| `/api/v1/summary` | `GET` | Yes | Drift summary, confidence trend, concept drift events |
+| `/api/v1/drift/statistical` | `POST` | Yes | Run statistical drift detection on provided data |
+| `/api/v1/drift/semantic` | `POST` | Yes | Run semantic/embedding drift detection |
+| `/api/v1/drift/data-quality` | `POST` | Yes | Evaluate data quality metrics |
+| `/api/v1/drift/concept` | `POST` | Yes | Update concept drift detector with new error values |
+| `/api/v1/metrics` | `GET` | Yes | Protected metrics (Compliance / RiskEngineer only) |
+| `/api/v1/decision` | `POST` | Yes | Record a governance decision |
 
 Full interactive documentation is generated automatically by FastAPI at `/docs` once the backend is running.
 
@@ -295,24 +320,24 @@ The React dashboard provides role-based views for analysts, risk engineers, and 
 - **Overview** — Model health gauge, live transaction flow, confidence/drift/fairness/explainability subscores, governance action feed, and story timeline
 - **Review Queue** — Flagged transactions table with filters (date range, confidence threshold), detail panel with SHAP snapshot, and bulk status actions
 - **Drift Monitoring** — Statistical drift, concept drift timeline, semantic drift, and distribution comparison charts
-- **Explainability** — Global SHAP feature importance and local LIME explanations for individual decisions
+- **Explainability** — Global SHAP feature importance, local LIME explanations, and tabular Grad-CAM attribution heatmap for individual decisions
 - **Fairness Monitoring** — Protected attribute segment analysis and demographic parity metrics
 - **Policies** — Governance policy cards with version history and edit flows
 - **Audit Log** — Full audit trail with search, filters, and exportable decision records
 
 ## How It Works
 
-1. A transaction is sent to `POST /api/v1/predict`, which returns a fraud prediction, confidence score, risk score, decision, and SHAP-based explanations in real time.
+1. A transaction is sent to `POST /api/v1/predict`, which returns a fraud prediction, confidence score, risk score, decision, and SHAP-based explanations in real time. The prediction response is returned immediately; audit logging, alerting, and prediction-record writes are deferred to a background task so the client does not wait for database I/O.
 2. Every prediction is logged to the database before any further processing happens, so nothing is lost even if a downstream step fails.
-3. In the background, drift detectors compare recent transaction patterns against the distribution the model was trained on, surfaced via `GET /api/v1/summary`.
-4. A governance policy engine evaluates drift, confidence, and fairness signals against configurable thresholds (`/api/v1/policies` and `/api/v1/policies/evaluate`), deciding whether to alert, recommend a retrain, or trigger a safer fallback.
-5. The dashboard (`frontend/`) fetches from `/api/v1/dashboard`, `/api/v1/predictions`, `/api/v1/audit`, and `/api/v1/summary` to render a live view of model health, flagged transactions, and governance history for analysts and risk teams.
+3. In the background, drift detectors compare recent transaction patterns against the distribution the model was trained on, surfaced via `GET /api/v1/summary`. Reference datasets for drift comparison are available under `backend/data/mendeley/` and can be compared via `POST /api/v1/datasets/compare`.
+4. A governance policy engine evaluates drift, confidence, and fairness signals against configurable thresholds (`/api/v1/policies`, `/api/v1/policies/history`, `/api/v1/policies/draft`), deciding whether to alert, recommend a retrain, or trigger a safer fallback.
+5. The dashboard (`frontend/`) fetches from `/api/v1/dashboard`, `/api/v1/predictions`, `/api/v1/audit`, and `/api/v1/summary` to render a live view of model health, flagged transactions, and governance history for analysts and risk teams. The Explainability page also calls `POST /api/v1/explainability/grad-cam` to render tabular Grad-CAM attributions for the selected transaction.
 
 ## Tech Stack
 
 - **Frontend:** React, Vite, Chart.js
 - **Backend:** FastAPI, Uvicorn, SQLAlchemy
-- **Model:** scikit-learn pipeline with SHAP/LIME explainability
+- **Model:** scikit-learn pipeline with SHAP/LIME/Grad-CAM explainability
 - **Database:** SQLite (local dev) / PostgreSQL (Docker) with Alembic migrations
 - **Authentication:** JWT (python-jose)
 - **Containerization:** Docker, Docker Compose
@@ -334,6 +359,9 @@ The suite covers API endpoints, authentication, drift detection, explainability,
 - **Rate limiting** is per-IP, not per-token, so it is not suitable for multi-tenant production use as-is.
 - **Authorization** uses role-based access control, but there is no scoped API key system — all authenticated users have equal access to all endpoints.
 - **Explainability Loss** currently measures SHAP coverage only (presence of explanations), not explanation quality or stability over time.
+- **Model provenance** is limited: `model_meta.pkl` stores only the model version, not the training dataset name, date, or class balance. Training artifacts (`fraud_model.pkl`, `baseline_stats.pkl`, `feature_columns.pkl`) are not tracked in git.
+- **Grad-CAM** is available on the backend (`POST /api/v1/explainability/grad-cam`) and wired into the frontend Explainability page as a tabular attribution heatmap.
+- **Dataset comparison** uses reference datasets under `backend/data/mendeley/` for drift simulation; these are not used for model training.
 
 These are intentionally scoped out for this stage of the project and noted here for transparency.
 
