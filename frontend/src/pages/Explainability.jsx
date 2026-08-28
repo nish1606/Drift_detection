@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getTransactions } from '../api'
+import { getTransactions, getGradCam } from '../api'
 
 function BarChart({ data, height = 220, color = '#10b981' }) {
   const max = Math.max(...data.map((d) => Math.abs(d.value)), 1)
@@ -50,6 +50,9 @@ export default function Explainability({ role }) {
   const [transactions, setTransactions] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [gradCamData, setGradCamData] = useState(null)
+  const [gradCamLoading, setGradCamLoading] = useState(false)
+  const [gradCamError, setGradCamError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -68,6 +71,34 @@ export default function Explainability({ role }) {
       active = false
     }
   }, [role])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setGradCamData(null)
+      return
+    }
+    const selected = transactions.find((t) => t.id === selectedId)
+    if (!selected?.features) {
+      setGradCamData(null)
+      return
+    }
+    let active = true
+    setGradCamLoading(true)
+    setGradCamError('')
+    getGradCam(selected.features, role)
+      .then((data) => {
+        if (active) setGradCamData(data)
+      })
+      .catch((err) => {
+        if (active) setGradCamError(err.message || 'Failed to load Grad-CAM')
+      })
+      .finally(() => {
+        if (active) setGradCamLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [selectedId, transactions, role])
 
   const selected = useMemo(
     () => transactions.find((t) => t.id === selectedId) || null,
@@ -177,6 +208,49 @@ export default function Explainability({ role }) {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Tabular Grad-CAM</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Linear attribution heatmap for the selected decision.</p>
+          </div>
+          <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700 dark:border-violet-900 dark:bg-violet-950/50 dark:text-violet-300">
+            Local
+          </span>
+        </div>
+        <div className="mt-4">
+          {gradCamLoading && (
+            <div className="p-6 text-sm text-slate-500 dark:text-slate-400">Loading Grad-CAM attribution...</div>
+          )}
+          {gradCamError && (
+            <div className="p-4 text-sm text-rose-600 dark:text-rose-400">{gradCamError}</div>
+          )}
+          {!gradCamLoading && !gradCamError && gradCamData && (
+            <div className="space-y-2">
+              {gradCamData.attributions?.map((attr, idx) => {
+                const heatPercent = Math.round((attr.heat || 0) * 100)
+                return (
+                  <div key={idx} className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-900">
+                    <span className="w-40 truncate text-sm font-medium text-slate-700 dark:text-slate-200">{attr.feature}</span>
+                    <span className="flex-1">
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                        <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${heatPercent}%` }} />
+                      </div>
+                    </span>
+                    <span className="w-16 text-right text-xs text-slate-600 dark:text-slate-300">{attr.value.toFixed ? Number(attr.value).toFixed(4) : attr.value}</span>
+                    <span className="w-24 text-right text-xs font-semibold text-violet-700 dark:text-violet-300">{heatPercent}%</span>
+                    <span className="w-36 text-right text-xs text-slate-500 dark:text-slate-400">{attr.direction}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {!gradCamLoading && !gradCamError && !gradCamData && (
+            <p className="text-sm text-slate-500 dark:text-slate-400">Select a transaction to view Grad-CAM attribution.</p>
+          )}
         </div>
       </section>
 

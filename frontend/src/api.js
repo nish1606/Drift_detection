@@ -179,3 +179,10 @@ export async function getStoryTimeline(role = 'Analyst') {
   const audit = await request('/audit', {}, role)
   return audit.map(mapAuditToStory).slice(0, 10)
 }
+
+export async function getGradCam(features, role = 'Analyst') {
+  return request('/explainability/grad-cam', {
+    method: 'POST',
+    body: JSON.stringify({ model_name: 'fraud_classifier', features }),
+  }, role)
+}
