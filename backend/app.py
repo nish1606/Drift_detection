@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.auth import router as auth_router
 from backend.api.drift import router as drift_router
+from backend.api.explainability import router as explainability_router
 from backend.api.governance import router as governance_router
 from backend.api.health import router as health_router
 from backend.api.monitoring import router as monitoring_router
@@ -115,6 +116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(governance_router, prefix=active_settings.api_prefix)
     app.include_router(monitoring_router, prefix=active_settings.api_prefix)
     app.include_router(drift_router, prefix=active_settings.api_prefix)
+    app.include_router(explainability_router, prefix=active_settings.api_prefix)
 
     return app
 
