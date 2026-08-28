@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import csv
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import joblib
 import numpy as np
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.api.deps import db_dep
@@ -13,6 +16,8 @@ from backend.core.auth import get_current_active_user
 from backend.database import crud
 from backend.database.models import User
 from backend.detection.concept_drift import ConceptDriftDetector
+from backend.detection.dataset_comparison import compare_datasets as compare_dataset_files
+from backend.detection.dataset_comparison import dataset_metadata, dataset_path, discover_datasets
 from backend.detection.data_quality import DataQualityChecker
 from backend.detection.semantic_drift import detect_semantic_drift
 from backend.detection.statistical_drift import StatisticalDriftDetector
@@ -27,6 +32,80 @@ router = APIRouter(tags=["drift"])
 ARTIFACT_DIR = Path(__file__).resolve().parent.parent.parent / "ml_model" / "artifacts"
 BASELINE_STATS_PATH = ARTIFACT_DIR / "baseline_stats.pkl"
 _REFERENCE_CACHE: dict[str, np.ndarray] = {}
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+
+class DatasetComparisonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference: str
+    current: str
+    feature: str = "Amount"
+
+
+def _dataset_paths() -> dict[str, Path]:
+    return discover_datasets()
+
+
+def _read_numeric_values(path: Path, feature: str) -> list[float]:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        field = next((name for name in (reader.fieldnames or []) if name.lower() == feature.lower()), None)
+        if field is None:
+            return []
+        values = []
+        for row in reader:
+            try:
+                value = float(row.get(field, ""))
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(value):
+                values.append(value)
+        return values
+
+
+def _distribution(values: list[float], edges: np.ndarray) -> list[int]:
+    counts, _ = np.histogram(values, bins=edges)
+    return counts.astype(int).tolist()
+
+
+@router.get("/datasets")
+def list_datasets(user: User = Depends(get_current_active_user)) -> list[dict[str, object]]:
+    return [dataset_metadata(path) for _, path in sorted(_dataset_paths().items())]
+
+
+@router.post("/datasets/compare")
+def compare_datasets(request: DatasetComparisonRequest, user: User = Depends(get_current_active_user)) -> dict[str, object]:
+    reference_path = dataset_path(request.reference)
+    current_path = dataset_path(request.current)
+    if reference_path is None or current_path is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    result = compare_dataset_files(reference_path, current_path, [request.feature])
+    selected = result["features"][0] if result["features"] else None
+    if selected is None:
+        raise HTTPException(status_code=400, detail=f"Feature '{request.feature}' is not shared with usable values")
+    return {"reference": request.reference, "current": request.current, "feature": selected["feature"], "referenceRows": selected["referenceRows"], "currentRows": selected["currentRows"], "referenceMean": selected["referenceMean"], "currentMean": selected["currentMean"], "driftScore": selected["driftScore"], "bins": selected["bins"], **result}
+
+
+@router.post("/datasets/upload")
+async def upload_dataset(file: UploadFile = File(...), user: User = Depends(get_current_active_user)) -> dict[str, object]:
+    original_name = Path(file.filename or "").name
+    if not original_name or Path(original_name).suffix.casefold() != ".csv" or original_name != (file.filename or ""):
+        raise HTTPException(status_code=400, detail="Only safe .csv filenames are accepted")
+    content = await file.read(10 * 1024 * 1024 + 1)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="CSV file exceeds the 10 MB limit")
+    if file.content_type not in {"text/csv", "application/csv", "application/vnd.ms-excel", "application/octet-stream"}:
+        raise HTTPException(status_code=415, detail="Upload must have a CSV content type")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    target = DATA_DIR / f"upload_{uuid4().hex}_{original_name}"
+    target.write_bytes(content)
+    try:
+        metadata = dataset_metadata(target)
+    except (UnicodeDecodeError, csv.Error) as error:
+        target.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Uploaded file is not a readable CSV") from error
+    return metadata
 
 
 def _load_baseline() -> dict[str, dict[str, float]] | None:

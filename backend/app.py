@@ -16,6 +16,7 @@ from backend.api.predictions import router as predictions_router
 from backend.core.config import Settings, get_settings
 from backend.core.exceptions import FraudGovernanceError
 from backend.core.middleware import RateLimitMiddleware, RequestContextMiddleware, exception_response
+from backend.data.seed_users import seed_users
 from backend.database import crud
 from backend.database.postgres import configure_engine, get_session, initialize_database
 from backend.governance.policy_loader import PolicyLoader
@@ -51,6 +52,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(active_settings.log_level)
     configure_engine(active_settings.database_url)
     initialize_database()
+    db = get_session()
+    try:
+        seed_users(db)
+    finally:
+        db.close()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

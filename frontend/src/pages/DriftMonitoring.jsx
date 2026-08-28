@@ -4,7 +4,7 @@ import DistributionCompare from '../components/DistributionCompare'
 import TooltipTerm from '../components/TooltipTerm'
 import WhatIfSimulator from '../components/WhatIfSimulator'
 import LastUpdated from '../components/LastUpdated'
-import { getDriftHistory } from '../api'
+import { compareDatasets, getDatasets, getDriftHistory } from '../api'
 import { formatDateTime } from '../utils/formatters'
 
 const featureOptions = [
@@ -19,6 +19,13 @@ export default function DriftMonitoring({ role }) {
   const [selectedFeature, setSelectedFeature] = useState('transactionAmount')
   const [comparisonMix, setComparisonMix] = useState(58)
   const [comparisonSplit, setComparisonSplit] = useState(60)
+  const [datasets, setDatasets] = useState([])
+  const [referenceDataset, setReferenceDataset] = useState('')
+  const [currentDataset, setCurrentDataset] = useState('')
+  const [comparisonFeature, setComparisonFeature] = useState('Amount')
+  const [comparison, setComparison] = useState(null)
+  const [comparisonLoading, setComparisonLoading] = useState(false)
+  const [comparisonError, setComparisonError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -50,6 +57,26 @@ export default function DriftMonitoring({ role }) {
       window.clearInterval(timer)
     }
   }, [role])
+
+  useEffect(() => {
+    getDatasets(role).then((nextDatasets) => {
+      setDatasets(nextDatasets)
+      if (nextDatasets.length > 1) {
+        setReferenceDataset(nextDatasets.find((dataset) => dataset.name.includes('train'))?.name ?? nextDatasets[0].name)
+        setCurrentDataset(nextDatasets.find((dataset) => dataset.name.includes('test'))?.name ?? nextDatasets[1].name)
+      }
+    }).catch((error) => setComparisonError(error.message))
+  }, [role])
+
+  useEffect(() => {
+    if (!referenceDataset || !currentDataset || referenceDataset === currentDataset) return
+    setComparisonLoading(true)
+    setComparisonError('')
+    compareDatasets({ reference: referenceDataset, current: currentDataset, feature: comparisonFeature }, role)
+      .then(setComparison)
+      .catch((error) => setComparisonError(error.message))
+      .finally(() => setComparisonLoading(false))
+  }, [comparisonFeature, currentDataset, referenceDataset, role])
 
   const statisticalData = useMemo(() => {
     if (!metrics) {
@@ -95,7 +122,7 @@ export default function DriftMonitoring({ role }) {
     }
   }, [metrics])
 
-  const comparisonBins = metrics?.driftDistributions?.[selectedFeature] ?? []
+  const comparisonBins = comparison?.bins ?? metrics?.driftDistributions?.[selectedFeature] ?? []
 
   if (loading && !metrics) {
     return <div className="h-80 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" />
@@ -173,10 +200,41 @@ export default function DriftMonitoring({ role }) {
         ) : null}
       </section>
 
+      {datasets.length > 1 ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Dataset comparison</h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Compare any two CSV datasets from the project data library.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reference
+                <select value={referenceDataset} onChange={(event) => setReferenceDataset(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-700">
+                  {datasets.map((dataset) => <option key={dataset.name}>{dataset.name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current
+                <select value={currentDataset} onChange={(event) => setCurrentDataset(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-700">
+                  {datasets.map((dataset) => <option key={dataset.name}>{dataset.name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Feature
+                <select value={comparisonFeature} onChange={(event) => setComparisonFeature(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-700">
+                  <option>Amount</option><option>Time</option><option>FraudLabel</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          {comparisonError ? <p className="mt-3 text-sm text-rose-600">{comparisonError}</p> : null}
+          {comparisonLoading ? <p className="mt-4 text-sm text-slate-500">Calculating comparison...</p> : null}
+          {comparison ? <p className="mt-4 text-sm text-slate-600">Drift score <strong className="text-slate-900">{comparison.driftScore}</strong> · {comparison.referenceRows.toLocaleString()} reference rows · {comparison.currentRows.toLocaleString()} current rows · means {comparison.referenceMean} vs {comparison.currentMean}</p> : null}
+        </section>
+      ) : null}
+
       {comparisonBins.length ? (
         <DistributionCompare
-          title="Baseline vs current split"
-          subtitle="Split one dataset into a baseline slice and a current slice to compare how the distribution has evolved."
+          title={comparison ? `${comparison.reference} vs ${comparison.current}` : 'Baseline vs current split'}
+          subtitle={comparison ? `${comparisonFeature} distribution comparison` : 'Compare how the distribution has evolved.'}
           bins={comparisonBins}
           mix={comparisonMix}
           onMixChange={setComparisonMix}

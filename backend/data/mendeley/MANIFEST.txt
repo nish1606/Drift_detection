@@ -1,0 +1,14 @@
+Final revised Mendeley package - 12 files
+
+1. harmonized_5000_temporally_matched.csv
+2. IEEE_selected_2000_final.csv
+3. IEEE_selected_2000_temporally_matched_with_type.csv
+4. IEEE_selected_2000_temporally_matched.csv
+5. PaySim_selected_2016_temporally_matched_with_type.csv
+6. PaySim_selected_2016_temporally_matched.csv
+7. ULB_selected_984_temporally_matched.csv
+8. train_random_80.csv
+9. test_random_20.csv
+10. train_time_80.csv
+11. test_time_20.csv
+12. revised.ipynb

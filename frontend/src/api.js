@@ -140,6 +140,17 @@ export async function getDriftHistory(role = 'Analyst') {
   return request('/summary', {}, role)
 }
 
+export async function getDatasets(role = 'Analyst') {
+  return request('/datasets', {}, role)
+}
+
+export async function compareDatasets(payload, role = 'Analyst') {
+  return request('/datasets/compare', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, role)
+}
+
 export async function postDriftStatistical(payload, role = 'Analyst') {
   return request('/drift/statistical', {
     method: 'POST',
