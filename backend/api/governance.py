@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.deps import (
@@ -13,7 +15,7 @@ from backend.api.deps import (
 )
 from backend.core.auth import get_current_active_user, require_roles
 from backend.database import crud
-from backend.database.models import User
+from backend.database.models import AuditLog, User
 from backend.governance.decision_engine import DecisionEngine
 from backend.governance.policy_engine import PolicyEngine
 from backend.governance.policy_loader import PolicyLoader
@@ -89,6 +91,44 @@ def _extract_escalation(config: dict[str, Any]) -> str | None:
         if reasons:
             return "; ".join(reasons)
     return None
+
+
+@router.get("/policies/history")
+def policy_history(session: Session = Depends(db_dep), user: User = Depends(get_current_active_user), limit: int = 20) -> list[dict[str, Any]]:
+    rows = session.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
+    return [
+        {
+            "id": f"H-{index:03d}",
+            "policyName": row.resource_id,
+            "changedAt": row.created_at.isoformat(),
+            "changedBy": row.actor,
+            "changeSummary": row.payload.get("reason", f"{row.action} on {row.resource_type}") if isinstance(row.payload, dict) else f"{row.action} on {row.resource_type}",
+        }
+        for index, row in enumerate(rows)
+    ]
+
+
+@router.post("/policies/draft")
+def save_draft(policy: dict[str, Any], session: Session = Depends(db_dep), user: User = Depends(get_current_active_user)) -> dict[str, Any]:
+    payload = {
+        "actor": policy.get("modifiedBy", user.username if user else "system"),
+        "action": "policy_draft",
+        "resource_type": "policy",
+        "resource_id": policy.get("name", "unknown"),
+        "status": "draft",
+        "payload": {
+            "reason": f"Published draft for {policy.get('name', 'unknown')}.",
+            "policy": policy,
+        },
+    }
+    crud.create_audit_log(session, payload)
+    return {
+        "id": f"H-{datetime.now(timezone.utc).timestamp():.0f}",
+        "name": policy.get("name"),
+        "lastModified": datetime.now(timezone.utc).isoformat(),
+        "modifiedBy": policy.get("modifiedBy", user.username if user else "system"),
+        "version": policy.get("version", "1.0"),
+    }
 
 
 @router.post("/policies")

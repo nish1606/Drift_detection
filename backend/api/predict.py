@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, BackgroundTasks, Depends
 
 from backend.api.deps import (
-    db_dep,
     decision_engine_dep,
     model_service_dep,
     policy_engine_dep,
@@ -15,6 +13,7 @@ from backend.api.deps import (
 from backend.core.auth import get_current_active_user
 from backend.database import crud
 from backend.database.models import User
+from backend.database.postgres import get_session
 from backend.governance.decision_engine import DecisionEngine
 from backend.governance.policy_engine import PolicyEngine
 from backend.governance.risk_scoring import RiskScorer
@@ -25,10 +24,70 @@ from backend.schemas.prediction import PredictionRequest, PredictionResponse
 router = APIRouter(tags=["prediction"])
 
 
+def _persist_prediction(
+    request_id: str,
+    request: PredictionRequest,
+    prediction_result: object,
+    score: dict[str, object],
+    decision: object,
+    policy_evaluations: list[object],
+    user: User,
+) -> None:
+    session = get_session()
+    try:
+        DecisionLogger(session).log(
+            actor=user.username,
+            action="predict",
+            resource_type="model",
+            resource_id=request_id,
+            status=decision.decision if hasattr(decision, "decision") else str(decision),
+            metadata={
+                "request_id": request_id,
+                "probability": getattr(prediction_result, "probability", None),
+                "risk_score": score.get("risk_score"),
+                "prediction": getattr(prediction_result, "prediction", None),
+                "model_version": getattr(prediction_result, "model_version", None),
+                "features": request.features,
+                "engineered_features": getattr(prediction_result, "engineered_features", {}),
+            },
+        )
+        alerts: list[dict[str, object]] = []
+        decision_str = decision.decision if hasattr(decision, "decision") else str(decision)
+        if decision_str in {"block", "freeze", "review"}:
+            alert = AlertingService(session).create_alert(
+                severity="high" if decision_str in {"block", "freeze"} else "medium",
+                message=f"Prediction {decision_str} for {request.model_name}",
+                alert_type="prediction_decision",
+                context={"request_id": request_id, "probability": getattr(prediction_result, "probability", None), "risk_score": score.get("risk_score"), "model_version": getattr(prediction_result, "model_version", None)},
+            )
+            alerts.append({"id": alert.id, "severity": alert.severity, "message": alert.message})
+        crud.create_prediction_record(
+            session,
+            {
+                "request_id": request_id,
+                "model_name": request.model_name,
+                "model_version": getattr(prediction_result, "model_version", None),
+                "raw_features": request.features,
+                "engineered_features": getattr(prediction_result, "engineered_features", {}),
+                "prediction": getattr(prediction_result, "prediction", None),
+                "probability": getattr(prediction_result, "probability", None),
+                "risk_score": score.get("risk_score"),
+                "decision": decision_str,
+                "explanations": {"prediction": getattr(prediction_result, "explanations", {}), "policy": [evaluation.__dict__ for evaluation in policy_evaluations]},
+            },
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 @router.post("/predict", response_model=PredictionResponse)
 def predict(
     request: PredictionRequest,
-    session: Session = Depends(db_dep),
+    background_tasks: BackgroundTasks,
     model_service = Depends(model_service_dep),
     policy_engine: PolicyEngine = Depends(policy_engine_dep),
     risk_scorer: RiskScorer = Depends(risk_scorer_dep),
@@ -60,52 +119,7 @@ def predict(
         policy_evaluations=policy_evaluations,
     )
 
-    # Log the decision synchronously *before* any DB-dependent downstream
-    # operations (alerting, prediction record).  This guarantees every
-    # prediction is logged even if those later steps fail.
-    DecisionLogger(session).log(
-        actor=user.username,
-        action="predict",
-        resource_type="model",
-        resource_id=request_id,
-        status=decision.decision,
-        metadata={
-            "request_id": request_id,
-            "probability": prediction_result.probability,
-            "risk_score": score["risk_score"],
-            "prediction": prediction_result.prediction,
-            "model_version": prediction_result.model_version,
-            "features": request.features,
-            "engineered_features": prediction_result.engineered_features,
-        },
-    )
-
-    alerts: list[dict[str, object]] = []
-    if decision.decision in {"block", "freeze", "review"}:
-        alert = AlertingService(session).create_alert(
-            severity="high" if decision.decision in {"block", "freeze"} else "medium",
-            message=f"Prediction {decision.decision} for {request.model_name}",
-            alert_type="prediction_decision",
-            context={"request_id": request_id, "probability": prediction_result.probability, "risk_score": score["risk_score"], "model_version": prediction_result.model_version},
-        )
-        alerts.append({"id": alert.id, "severity": alert.severity, "message": alert.message})
-    crud.create_prediction_record(
-        session,
-        {
-            "request_id": request_id,
-            "model_name": request.model_name,
-            "model_version": prediction_result.model_version,
-            "raw_features": request.features,
-            "engineered_features": prediction_result.engineered_features,
-            "prediction": prediction_result.prediction,
-            "probability": prediction_result.probability,
-            "risk_score": score["risk_score"],
-            "decision": decision.decision,
-            "explanations": {"prediction": prediction_result.explanations, "policy": [evaluation.__dict__ for evaluation in policy_evaluations]},
-        },
-    )
-    session.commit()
-    return PredictionResponse(
+    response = PredictionResponse(
         request_id=request_id,
         model_name=request.model_name,
         model_version=prediction_result.model_version,
@@ -114,5 +128,18 @@ def predict(
         risk_score=score["risk_score"],
         decision=decision.decision,
         explanations=prediction_result.explanations,
-        alerts=alerts,
+        alerts=[],
     )
+
+    background_tasks.add_task(
+        _persist_prediction,
+        request_id=request_id,
+        request=request,
+        prediction_result=prediction_result,
+        score=score,
+        decision=decision,
+        policy_evaluations=policy_evaluations,
+        user=user,
+    )
+
+    return response

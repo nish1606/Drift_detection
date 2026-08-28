@@ -14,6 +14,7 @@ from backend.api.health import router as health_router
 from backend.api.monitoring import router as monitoring_router
 from backend.api.predict import router as predict_router
 from backend.api.predictions import router as predictions_router
+from backend.api.transactions import router as transactions_router
 from backend.core.config import Settings, get_settings
 from backend.core.exceptions import FraudGovernanceError
 from backend.core.middleware import RateLimitMiddleware, RequestContextMiddleware, exception_response
@@ -117,6 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(monitoring_router, prefix=active_settings.api_prefix)
     app.include_router(drift_router, prefix=active_settings.api_prefix)
     app.include_router(explainability_router, prefix=active_settings.api_prefix)
+    app.include_router(transactions_router, prefix=active_settings.api_prefix)
 
     return app
 

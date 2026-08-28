@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Body
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -32,7 +32,8 @@ def list_transactions(session: Session = Depends(db_dep), limit: int = 50) -> li
 
 
 @router.post("/transactions/{request_id}/status")
-def update_status(request_id: str, status: str, session: Session = Depends(db_dep)) -> dict[str, object]:
+def update_status(request_id: str, payload: dict[str, str] = Body(...), session: Session = Depends(db_dep)) -> dict[str, object]:
+    status = payload.get("status", "Pending")
     stmt = update(PredictionRecord).where(PredictionRecord.request_id == request_id).values(raw_features={"status": status})
     session.execute(stmt)
     session.commit()

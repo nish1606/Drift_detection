@@ -107,14 +107,14 @@ export async function getPolicies(role = 'Analyst') {
 
 export async function getPolicyHistory(role = 'Analyst') {
   try {
-    return await request('/policies', {}, role)
+    return await request('/policies/history', {}, role)
   } catch {
     return []
   }
 }
 
 export async function savePolicyDraft(policy, role = 'Analyst') {
-  return request('/policies', {
+  return request('/policies/draft', {
     method: 'POST',
     body: JSON.stringify(policy),
   }, role)
@@ -163,8 +163,11 @@ export async function getTransactions(role = 'Analyst') {
   return predictions.map((pred) => mapPredictionToTransaction(pred, role))
 }
 
-export async function updateTransactionStatus(requestId, status) {
-  return Promise.resolve({ request_id: requestId, status: status.toLowerCase() })
+export async function updateTransactionStatus(requestId, status, role = 'Analyst') {
+  return request(`/transactions/${encodeURIComponent(requestId)}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  }, role)
 }
 
 export async function getGovernanceActions(role = 'Analyst') {

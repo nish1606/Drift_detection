@@ -56,9 +56,9 @@ export default function Policies({ role }) {
     }
 
     setSaving(true)
-    const updated = await savePolicyDraft({ ...draft, modifiedBy: role === 'Compliance' ? 'Current compliance user' : 'Risk engineer reviewer' }, role)
-    setPolicies((current) => current.map((policy) => (policy.id === updated.id ? updated : policy)))
-    const nextHistory = await getPolicyHistory(role)
+    await savePolicyDraft({ ...draft, modifiedBy: role === 'Compliance' ? 'Current compliance user' : 'Risk engineer reviewer' }, role)
+    const [nextPolicies, nextHistory] = await Promise.all([getPolicies(role), getPolicyHistory(role)])
+    setPolicies(nextPolicies)
     setHistory(nextHistory)
     setSaving(false)
     setSelectedPolicy(null)
