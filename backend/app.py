@@ -32,6 +32,16 @@ SCALER_PATH = os.path.join(BACKEND_DIR, "scaler.pkl")
 FEATURE_COLUMNS_PATH = os.path.join(BACKEND_DIR, "feature_columns.pkl")
 MODEL_META_PATH = os.path.join(BACKEND_DIR, "model_meta.pkl")
 
+# Bootstrap endpoints that cannot require a token: the client has no credentials
+# yet, and the readiness probe must answer before login is possible.
+PUBLIC_PATHS = frozenset({
+    "/api/v1/health",
+    "/api/v1/ready",
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+})
+DOCS_PATHS = frozenset({"/docs", "/openapi.json", "/redoc"})
+
 
 def _load_predictor() -> FraudPredictor:
     """Load model artifacts once at startup — no per-request disk I/O."""
@@ -85,6 +95,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = active_settings
     app.state.metrics_collector = None
+
+    @app.middleware("http")
+    async def enforce_authentication(request, call_next):
+        """Deny any /api request that carries no usable bearer token.
+
+        Individual routers still declare ``Depends(get_current_active_user)`` so
+        FastAPI's own 401 handling stays authoritative; this guard is the
+        backstop that stops a newly added route from shipping unauthenticated.
+        """
+        path = request.url.path
+        if path.startswith("/api/") and path not in PUBLIC_PATHS:
+            header = request.headers.get("Authorization") or ""
+            if not header.startswith("Bearer ") or not header.removeprefix("Bearer ").strip():
+                from fastapi.responses import JSONResponse
+
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Not authenticated"},
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        response = await call_next(request)
+        return response
+
     app.add_middleware(RateLimitMiddleware, limit=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")), window=60.0)
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(

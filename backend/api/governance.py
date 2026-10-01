@@ -148,12 +148,12 @@ def upsert_policy(payload: dict[str, object], session: Session = Depends(db_dep)
 
 
 @router.post("/policies/evaluate", response_model=list[dict[str, object]])
-def evaluate_policies(request: dict[str, object], policy_engine: PolicyEngine = Depends(policy_engine_dep)) -> list[dict[str, object]]:
+def evaluate_policies(request: dict[str, object], policy_engine: PolicyEngine = Depends(policy_engine_dep), user: User = Depends(get_current_active_user)) -> list[dict[str, object]]:
     return [evaluation.__dict__ for evaluation in policy_engine.evaluate(request)]
 
 
 @router.post("/risk-score", response_model=RiskScoreResponse)
-def compute_risk_score(request: RiskScoreRequest, scorer: RiskScorer = Depends(risk_scorer_dep)) -> RiskScoreResponse:
+def compute_risk_score(request: RiskScoreRequest, scorer: RiskScorer = Depends(risk_scorer_dep), user: User = Depends(get_current_active_user)) -> RiskScoreResponse:
     result = scorer.score(
         probability=request.probability,
         drift_score=drift_signal_from_psi(request.raw_psi) if request.raw_psi is not None else request.drift_score,
@@ -165,7 +165,7 @@ def compute_risk_score(request: RiskScoreRequest, scorer: RiskScorer = Depends(r
 
 
 @router.post("/decision", response_model=DecisionResponse)
-def compute_decision(request: DecisionRequest, engine: DecisionEngine = Depends(decision_engine_dep)) -> DecisionResponse:
+def compute_decision(request: DecisionRequest, engine: DecisionEngine = Depends(decision_engine_dep), user: User = Depends(get_current_active_user)) -> DecisionResponse:
     outcome = engine.decide(
         probability=request.probability,
         risk_score=request.risk_score,

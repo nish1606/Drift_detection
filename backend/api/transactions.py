@@ -5,13 +5,14 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.api.deps import db_dep
-from backend.database.models import PredictionRecord
+from backend.core.auth import get_current_active_user
+from backend.database.models import PredictionRecord, User
 
 router = APIRouter(tags=["transactions"])
 
 
 @router.get("/transactions")
-def list_transactions(session: Session = Depends(db_dep), limit: int = 50) -> list[dict[str, object]]:
+def list_transactions(session: Session = Depends(db_dep), user: User = Depends(get_current_active_user), limit: int = 50) -> list[dict[str, object]]:
     rows = session.scalars(select(PredictionRecord).order_by(PredictionRecord.created_at.desc()).limit(limit)).all()
     return [
         {
@@ -32,7 +33,7 @@ def list_transactions(session: Session = Depends(db_dep), limit: int = 50) -> li
 
 
 @router.post("/transactions/{request_id}/status")
-def update_status(request_id: str, payload: dict[str, str] = Body(...), session: Session = Depends(db_dep)) -> dict[str, object]:
+def update_status(request_id: str, payload: dict[str, str] = Body(...), session: Session = Depends(db_dep), user: User = Depends(get_current_active_user)) -> dict[str, object]:
     status = payload.get("status", "Pending")
     stmt = update(PredictionRecord).where(PredictionRecord.request_id == request_id).values(raw_features={"status": status})
     session.execute(stmt)
