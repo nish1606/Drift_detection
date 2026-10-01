@@ -20,3 +20,17 @@ def test_training_produces_artifact(tmp_path):
     assert artifact.pipeline is not None
     assert artifact.artifact_path.endswith("fraud_classifier_test.joblib")
     assert artifact.metrics["accuracy"] >= 0.0
+
+
+def test_scaling_is_optional_and_legacy_pipeline_is_unchanged(tmp_path):
+    features = [
+        {"amount": 10, "transaction_hour": 1, "country": "US", "velocity_spike": 0},
+        {"amount": 9000, "transaction_hour": 23, "country": "NG", "velocity_spike": 1},
+        {"amount": 15, "transaction_hour": 10, "country": "US", "velocity_spike": 0},
+        {"amount": 8000, "transaction_hour": 22, "country": "NG", "velocity_spike": 1},
+    ]
+    labels = [0, 1, 0, 1]
+    legacy = FraudModelTrainer(artifact_dir=str(tmp_path / "legacy"), scale_features=False)._build_pipeline()
+    scaled = FraudModelTrainer(artifact_dir=str(tmp_path / "scaled"), scale_features=True)._build_pipeline()
+    assert [name for name, _ in legacy.steps] == ["vectorizer", "model"]
+    assert [name for name, _ in scaled.steps] == ["vectorizer", "scaler", "model"]

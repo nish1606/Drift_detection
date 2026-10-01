@@ -34,7 +34,7 @@ def _loaded_model(model_service):
     return predictor._ensure_loaded()
 
 
-@router.post("/shap", response_model=ExplainabilityResponse)
+@router.api_route("/shap", methods=["GET", "POST"], response_model=ExplainabilityResponse)
 def shap_explanation(
     request: GradCAMRequest,
     model_service=Depends(model_service_dep),
@@ -50,7 +50,7 @@ def shap_explanation(
     return ExplainabilityResponse(method="shap", values=values)
 
 
-@router.post("/lime", response_model=ExplainabilityResponse)
+@router.api_route("/lime", methods=["GET", "POST"], response_model=ExplainabilityResponse)
 def lime_explanation(
     request: GradCAMRequest,
     model_service=Depends(model_service_dep),
