@@ -1,15 +1,20 @@
-"""Benchmark POST /predict latency with 200 sequential requests."""
+"""Benchmark POST /predict latency with configurable sequential requests.
+
+For benchmarks above 60 requests per minute, raise RATE_LIMIT_PER_MINUTE
+(for example, to 100000); this changes only the benchmarking setting.
+"""
 from __future__ import annotations
 
+import argparse
+import json
 import time
 import urllib.request
-import json
 
 LOGIN_URL = "http://127.0.0.1:8000/api/v1/auth/login"
 PREDICT_URL = "http://127.0.0.1:8000/api/v1/predict"
 USERNAME = "analyst"
 PASSWORD = "analyst123"
-REQUESTS = 20
+DEFAULT_REQUESTS = 20
 
 FEATURES = {
     "amount": 1200.0,
@@ -31,9 +36,9 @@ def get_token() -> str:
         return json.loads(resp.read())["access_token"]
 
 
-def predict(token: str) -> tuple[int, float]:
+def predict(token: str, base_url: str) -> tuple[int, float]:
     body = json.dumps({"model_name": "fraud_classifier", "features": FEATURES}).encode()
-    req = urllib.request.Request(PREDICT_URL, data=body, headers={
+    req = urllib.request.Request(f"{base_url}/api/v1/predict", data=body, headers={
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}",
     }, method="POST")
@@ -46,29 +51,55 @@ def predict(token: str) -> tuple[int, float]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--requests", type=int, default=DEFAULT_REQUESTS)
+    parser.add_argument("--warmup", type=int, default=0)
+    parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    args = parser.parse_args()
+    base_url = args.base_url.rstrip("/")
     token = get_token()
+    for _ in range(args.warmup):
+        try:
+            predict(token, base_url)
+        except Exception:
+            pass
     latencies: list[float] = []
-    decisions: list[int] = []
+    successful = 0
+    failed = 0
+    wall_start = time.perf_counter()
 
-    for _ in range(REQUESTS):
-        prediction, elapsed = predict(token)
-        decisions.append(prediction)
-        latencies.append(elapsed)
+    for _ in range(args.requests):
+        try:
+            _, elapsed = predict(token, base_url)
+            successful += 1
+            latencies.append(elapsed)
+        except Exception:
+            failed += 1
 
+    wall_seconds = time.perf_counter() - wall_start
+    if not latencies:
+        print(f"Requests: {args.requests} (n=0 successful samples)")
+        print(f"Successful: {successful}")
+        print(f"Failed: {failed}")
+        return
     latencies.sort()
-    p50 = latencies[int(len(latencies) * 0.50)]
-    p95 = latencies[int(len(latencies) * 0.95)]
-    p99 = latencies[int(len(latencies) * 0.99)]
+    sample_count = len(latencies)
+    percentile = lambda value: latencies[min(int(sample_count * value), sample_count - 1)]
+    p50 = percentile(0.50)
+    p95 = percentile(0.95)
+    p99 = percentile(0.99)
     mean_latency = sum(latencies) / len(latencies)
 
-    print(f"Requests: {REQUESTS}")
+    print(f"Requests: {args.requests} (n={sample_count} successful samples)")
+    print(f"Successful: {successful}")
+    print(f"Failed: {failed}")
     print(f"Mean latency: {mean_latency:.2f} ms")
     print(f"P50: {p50:.2f} ms")
     print(f"P95: {p95:.2f} ms")
     print(f"P99: {p99:.2f} ms")
-    print(f"Decisions: {sum(1 for d in decisions if d == 1)} block, {sum(1 for d in decisions if d == 0)} legitimate")
-    print(f"Target: 200 ms")
-    print(f"P95 PASS: {p95 < 200}")
+    print(f"Min: {latencies[0]:.2f} ms")
+    print(f"Max: {latencies[-1]:.2f} ms")
+    print(f"Sequential throughput: {successful / wall_seconds:.2f} requests/sec")
 
 
 if __name__ == "__main__":
