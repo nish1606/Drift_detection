@@ -161,6 +161,47 @@ def model_results(frame: pd.DataFrame) -> dict[str, object]:
     return {"legacy": legacy_metrics, "scaled": scaled_metrics, "threshold_analysis": threshold_metrics, "chronological split on synthetic data": chronological_metrics}
 
 
+def half_split_psi_results(frame: pd.DataFrame) -> dict[str, object]:
+    """PSI between the first and second half of the rows, in file order.
+
+    The split is by row order, not by value or by a random seed, so the two
+    halves are reproducible. Missing values are dropped per feature rather than
+    per row, and each feature reports how many non-missing values each half
+    contributed. ``timestamp`` is excluded because it increases monotonically
+    with row order and would otherwise dominate every score.
+    """
+    data = frame.drop(columns=["isFraud"], errors="ignore")
+    half = len(data) // 2
+    reference_frame = data.iloc[:half]
+    current_frame = data.iloc[half:]
+    detector = StatisticalDriftDetector()
+    features: dict[str, object] = {}
+    for column in data.columns:
+        if column == "timestamp":
+            continue
+        reference_values = pd.to_numeric(reference_frame[column], errors="coerce").dropna().to_numpy(dtype=float)
+        current_values = pd.to_numeric(current_frame[column], errors="coerce").dropna().to_numpy(dtype=float)
+        if reference_values.size == 0 and current_values.size == 0:
+            continue
+        score = float(detector._psi(reference_values, current_values))
+        features[column] = {
+            "psi": round(score, 6),
+            "drifted": bool(score >= detector.threshold),
+            "referenceNonMissing": int(reference_values.size),
+            "currentNonMissing": int(current_values.size),
+            "referenceRows": int(len(reference_frame)),
+            "currentRows": int(len(current_frame)),
+        }
+    overall = float(np.mean([item["psi"] for item in features.values()])) if features else 0.0
+    return {
+        "split": "row order, first half vs second half",
+        "excludedFeatures": ["timestamp"],
+        "features": features,
+        "overallPsi": round(overall, 6),
+        "driftedFeatures": sorted(name for name, item in features.items() if item["drifted"]),
+    }
+
+
 def explainability_results(frame: pd.DataFrame) -> dict[str, object]:
     features = _records(frame.drop(columns=["isFraud"]))
     labels = frame["isFraud"].astype(int).tolist()
@@ -209,6 +250,7 @@ def main() -> None:
         "semantic_drift": {"legacy_all_pairs": detect_semantic_drift(["travel", "grocery"], ["travel", "grocery"]), "paired_best_match": detect_semantic_drift(["travel", "grocery"], ["travel", "grocery"], mode="paired_best_match")},
         "data_quality": {"legacy_none_only": DataQualityChecker(treat_nan_as_missing=False).evaluate(_records(frame.head(1000).drop(columns=["isFraud"]))).score, "nan_as_missing": DataQualityChecker(treat_nan_as_missing=True).evaluate(frame.head(1000).drop(columns=["isFraud"]).to_dict("records")).score},
         "models": model_results(frame),
+        "half_split_psi": half_split_psi_results(frame),
         "explainability": explainability_results(frame),
         "package_versions": {name: importlib.metadata.version(name) for name in ("numpy", "pandas", "scikit-learn", "shap", "lime") if _package_available(name)},
     }
@@ -232,6 +274,18 @@ def main() -> None:
         f"| converged | {results['models']['legacy']['converged']} | {results['models']['scaled']['converged']} |",
         f"| convergence warning | {results['models']['legacy']['convergence_warning']} | {results['models']['scaled']['convergence_warning']} |",
     ])
+    psi = results["half_split_psi"]
+    lines.extend([
+        "",
+        "## Half-split PSI (row order, first half vs second half)",
+        "",
+        f"Excluded features: {', '.join(psi['excludedFeatures'])}. Overall PSI: {psi['overallPsi']}.",
+        "",
+        "| Feature | PSI | Drifted | Reference non-missing | Current non-missing |",
+        "| --- | --- | --- | --- | --- |",
+    ])
+    for name, item in psi["features"].items():
+        lines.append(f"| {name} | {item['psi']} | {item['drifted']} | {item['referenceNonMissing']} | {item['currentNonMissing']} |")
     (ROOT / "EXPERIMENT_RESULTS.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\nLegacy vs new changed values")
     print("\n".join(lines[lines.index("| --- | --- | --- |") + 1:]))

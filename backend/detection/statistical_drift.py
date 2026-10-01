@@ -25,7 +25,16 @@ class StatisticalDriftDetector:
         quantiles = np.unique(np.quantile(reference, np.linspace(0, 1, self.bins + 1)))
         if quantiles.size < 3:
             quantiles = np.linspace(min(reference.min(), current.min()), max(reference.max(), current.max()), self.bins + 1)
-        ref_hist, edges = np.histogram(reference, bins=quantiles)
+        # Extend the top edge so current values beyond the reference maximum are
+        # counted rather than silently discarded by np.histogram, which would
+        # otherwise compare unnormalised shares and report drift between two
+        # identical distributions.
+        edges = np.asarray(quantiles, dtype=float).copy()
+        if current.size:
+            edges[-1] = max(float(edges[-1]), float(current.max()), float(current.min()))
+        if edges.size < 2 or edges[0] >= edges[-1]:
+            return 0.0
+        ref_hist, _ = np.histogram(reference, bins=edges)
         cur_hist, _ = np.histogram(current, bins=edges)
         ref_pct = ref_hist / max(ref_hist.sum(), 1)
         cur_pct = cur_hist / max(cur_hist.sum(), 1)
