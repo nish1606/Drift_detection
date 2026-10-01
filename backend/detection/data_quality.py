@@ -15,9 +15,12 @@ class DataQualityResult:
 
 
 class DataQualityChecker:
-    def __init__(self, missing_threshold: float = 0.2, outlier_zscore: float = 3.0) -> None:
+    """Evaluate records; by default, only ``None`` counts as missing."""
+
+    def __init__(self, missing_threshold: float = 0.2, outlier_zscore: float = 3.0, treat_nan_as_missing: bool = False) -> None:
         self.missing_threshold = missing_threshold
         self.outlier_zscore = outlier_zscore
+        self.treat_nan_as_missing = treat_nan_as_missing
 
     def evaluate(self, records: list[Mapping[str, Any]]) -> DataQualityResult:
         if not records:
@@ -27,7 +30,7 @@ class DataQualityChecker:
         keys = sorted({key for record in records for key in record})
         for key in keys:
             values = [record.get(key) for record in records]
-            missing_rate = sum(value is None for value in values) / len(values)
+            missing_rate = sum(value is None or (self.treat_nan_as_missing and isinstance(value, float) and np.isnan(value)) for value in values) / len(values)
             score = max(0.0, 1.0 - missing_rate)
             if missing_rate >= self.missing_threshold:
                 issues.append(f"high_missingness:{key}")
