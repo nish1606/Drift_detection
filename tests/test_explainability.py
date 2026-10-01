@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import pytest
+
 from backend.explainability.lime_service import LimeService
 from backend.explainability.shap_service import ShapService
 from ml_model.train import FraudModelTrainer
 
 
 def test_explainability_services_return_mappings(tmp_path):
+    pytest.importorskip("shap")
+    pytest.importorskip("lime")
     trainer = FraudModelTrainer(artifact_dir=str(tmp_path / "artifacts"))
     features = [
         {"amount": 10, "transaction_hour": 1, "country": "US", "velocity_spike": 0},

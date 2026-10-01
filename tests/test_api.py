@@ -8,6 +8,8 @@ def test_health_endpoint(client):
 
 
 def test_predict_endpoint(client):
+    login = client.post("/api/v1/auth/login", data={"username": "analyst", "password": "analyst123"})
+    assert login.status_code == 200
     response = client.post(
         "/api/v1/predict",
         json={
@@ -20,7 +22,7 @@ def test_predict_endpoint(client):
                 "new_device": 1,
             },
         },
-        headers={"X-Role": "Analyst"},
+        headers={"X-Role": "Analyst", "Authorization": f"Bearer {login.json()['access_token']}"},
     )
     assert response.status_code == 200
     payload = response.json()
