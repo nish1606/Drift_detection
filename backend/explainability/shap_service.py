@@ -18,12 +18,12 @@ class ShapService:
         if hasattr(model, "named_steps") and "vectorizer" in model.named_steps and "model" in model.named_steps:
             vectorizer = model.named_steps["vectorizer"]
             estimator = model.named_steps["model"]
-            background = vectorizer.transform(training_background())
+            background = vectorizer.transform(training_background(limit=0))
             transformed = vectorizer.transform(features)
             if "scaler" in model.named_steps:
                 background = model.named_steps["scaler"].transform(background)
                 transformed = model.named_steps["scaler"].transform(transformed)
-            explainer = shap.LinearExplainer(estimator, background)
+            explainer = shap.LinearExplainer(estimator, background, max_samples=len(background))
             values = explainer(transformed).values[0]
             feature_names = vectorizer.get_feature_names_out()
             return {name: float(score) for name, score in zip(feature_names, values, strict=False)}

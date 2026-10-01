@@ -27,6 +27,19 @@ class TrainingArtifact:
     pipeline: Pipeline = field(repr=False)
 
 
+BACKGROUND_SIZE = 512
+BACKGROUND_SEED = 42
+
+
+def _background_rows(rows: list[dict[str, Any]], size: int) -> list[dict[str, float]]:
+    """Deterministic sample of the training rows used as the explanation background."""
+    if len(rows) <= size:
+        return [dict(row) for row in rows]
+    rng = np.random.default_rng(BACKGROUND_SEED)
+    indices = np.sort(rng.choice(len(rows), size=size, replace=False))
+    return [dict(rows[int(index)]) for index in indices]
+
+
 DEFAULT_MAX_ITER = 1000
 SCALED_MAX_ITER = 10000
 
@@ -75,6 +88,10 @@ class FraudModelTrainer:
         feature_names = pipeline.named_steps["vectorizer"].get_feature_names_out().tolist()
         joblib.dump(feature_names, self.artifact_dir / "feature_columns.pkl")
         joblib.dump({"model_version": model_version}, self.artifact_dir / "model_meta.pkl")
+        # Persist the real training rows so LIME/SHAP explain against the
+        # distribution the model actually learned, not a sample from the CSV.
+        background_rows = _background_rows(train_x, BACKGROUND_SIZE)
+        joblib.dump(background_rows, self.artifact_dir / "training_background.pkl")
 
         numeric_df = pd.DataFrame(engineered)
         baseline = {}
