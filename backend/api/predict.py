@@ -24,6 +24,40 @@ from backend.schemas.prediction import PredictionRequest, PredictionResponse
 router = APIRouter(tags=["prediction"])
 
 
+def _create_alert(
+    request_id: str,
+    request: PredictionRequest,
+    prediction_result: object,
+    score: dict[str, object],
+    decision_str: str,
+) -> list[dict[str, object]]:
+    """Create the decision alert in the request path so it can be returned inline."""
+    if decision_str not in {"block", "freeze", "review"}:
+        return []
+    severity = "high" if decision_str in {"block", "freeze"} else "medium"
+    session = get_session()
+    try:
+        alert = AlertingService(session).create_alert(
+            severity=severity,
+            message=f"Prediction {decision_str} for {request.model_name}",
+            alert_type="prediction_decision",
+            context={
+                "request_id": request_id,
+                "probability": getattr(prediction_result, "probability", None),
+                "risk_score": score.get("risk_score"),
+                "decision": decision_str,
+                "model_version": getattr(prediction_result, "model_version", None),
+            },
+        )
+        session.commit()
+        return [{"id": alert.id, "severity": alert.severity, "message": alert.message}]
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def _persist_prediction(
     request_id: str,
     request: PredictionRequest,
@@ -51,16 +85,7 @@ def _persist_prediction(
                 "engineered_features": getattr(prediction_result, "engineered_features", {}),
             },
         )
-        alerts: list[dict[str, object]] = []
         decision_str = decision.decision if hasattr(decision, "decision") else str(decision)
-        if decision_str in {"block", "freeze", "review"}:
-            alert = AlertingService(session).create_alert(
-                severity="high" if decision_str in {"block", "freeze"} else "medium",
-                message=f"Prediction {decision_str} for {request.model_name}",
-                alert_type="prediction_decision",
-                context={"request_id": request_id, "probability": getattr(prediction_result, "probability", None), "risk_score": score.get("risk_score"), "model_version": getattr(prediction_result, "model_version", None)},
-            )
-            alerts.append({"id": alert.id, "severity": alert.severity, "message": alert.message})
         crud.create_prediction_record(
             session,
             {
@@ -119,6 +144,14 @@ def predict(
         policy_evaluations=policy_evaluations,
     )
 
+    alerts = _create_alert(
+        request_id,
+        request,
+        prediction_result,
+        score,
+        decision.decision if hasattr(decision, "decision") else str(decision),
+    )
+
     response = PredictionResponse(
         request_id=request_id,
         model_name=request.model_name,
@@ -128,7 +161,7 @@ def predict(
         risk_score=score["risk_score"],
         decision=decision.decision,
         explanations=prediction_result.explanations,
-        alerts=[],
+        alerts=alerts,
     )
 
     background_tasks.add_task(
