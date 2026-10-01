@@ -10,7 +10,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from backend.core.exceptions import FraudGovernanceError
+from backend.core.exceptions import ConflictError, FraudGovernanceError, NotFoundError
 
 
 @dataclass
@@ -65,7 +65,14 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
 
 def exception_response(exc: Exception) -> JSONResponse:
-    status_code = 400 if isinstance(exc, FraudGovernanceError) else 500
+    if isinstance(exc, ConflictError):
+        status_code = 409
+    elif isinstance(exc, NotFoundError):
+        status_code = 404
+    elif isinstance(exc, FraudGovernanceError):
+        status_code = 400
+    else:
+        status_code = 500
     return JSONResponse(
         status_code=status_code,
         content={"detail": str(exc), "error_type": exc.__class__.__name__},

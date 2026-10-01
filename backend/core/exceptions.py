@@ -23,3 +23,7 @@ class DriftDetectedError(FraudGovernanceError):
 
 class NotFoundError(FraudGovernanceError):
     """Raised when a requested record is missing."""
+
+
+class ConflictError(FraudGovernanceError):
+    """Raised when a state transition is invalid for the current resource state."""

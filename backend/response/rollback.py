@@ -6,10 +6,15 @@ from sqlalchemy.orm import Session
 from backend.core.exceptions import NotFoundError
 from backend.database.models import ModelArtifact
 
+#: Kept for callers that want a minimal rollback; the full state machine with
+#: audit events lives in :class:`backend.response.freeze.ModelResponseService`.
+ROLLBACK_STATUS = "rolled_back"
+
 
 class RollbackService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, actor: str = "system") -> None:
         self.session = session
+        self.actor = actor
 
     def rollback(self, model_name: str) -> ModelArtifact:
         artifacts = list(
@@ -22,7 +27,7 @@ class RollbackService:
         previous = artifacts[1]
         for artifact in artifacts:
             artifact.active = artifact.id == previous.id
-            artifact.status = "active" if artifact.active else "rolled_back"
+            artifact.status = "active" if artifact.active else ROLLBACK_STATUS
         self.session.commit()
         self.session.refresh(previous)
         return previous
