@@ -27,18 +27,33 @@ class TrainingArtifact:
     pipeline: Pipeline = field(repr=False)
 
 
+DEFAULT_MAX_ITER = 1000
+SCALED_MAX_ITER = 10000
+
+
 class FraudModelTrainer:
-    def __init__(self, artifact_dir: str = "ml_model/artifacts", scale_features: bool = False) -> None:
+    def __init__(
+        self,
+        artifact_dir: str = "ml_model/artifacts",
+        scale_features: bool = False,
+        max_iter: int | None = None,
+    ) -> None:
         self.artifact_dir = Path(artifact_dir)
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
         self.feature_engineer = FeatureEngineer()
         self.scale_features = scale_features
+        # The legacy unscaled pipeline keeps max_iter=1000 for backwards
+        # compatibility with the reported paper numbers. The scaled pipeline is
+        # the recommended configuration: standardising the engineered features
+        # lets LBFGS converge well inside the default budget, and the raised
+        # ceiling keeps it converging when the feature set grows.
+        self.max_iter = max_iter if max_iter is not None else (SCALED_MAX_ITER if scale_features else DEFAULT_MAX_ITER)
 
     def _build_pipeline(self) -> Pipeline:
         steps = [("vectorizer", DictVectorizer(sparse=False))]
         if self.scale_features:
             steps.append(("scaler", StandardScaler(with_mean=False)))
-        steps.append(("model", LogisticRegression(max_iter=1000, class_weight="balanced")))
+        steps.append(("model", LogisticRegression(max_iter=self.max_iter, class_weight="balanced")))
         return Pipeline(steps=steps)
 
     def train(self, *, model_name: str, model_version: str, features: list[dict[str, Any]], labels: list[int]) -> TrainingArtifact:
