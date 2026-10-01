@@ -29,9 +29,9 @@ FEATURES = {
 }
 
 
-def get_token() -> str:
+def get_token(base_url: str) -> str:
     data = f"username={USERNAME}&password={PASSWORD}".encode()
-    req = urllib.request.Request(LOGIN_URL, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    req = urllib.request.Request(f"{base_url}/api/v1/auth/login", data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
     with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read())["access_token"]
 
@@ -57,7 +57,7 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
-    token = get_token()
+    token = get_token(base_url)
     for _ in range(args.warmup):
         try:
             predict(token, base_url)
