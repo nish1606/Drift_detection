@@ -17,6 +17,7 @@ from backend.core.auth import get_current_active_user, require_roles
 from backend.database import crud
 from backend.database.models import AuditLog, User
 from backend.governance.decision_engine import DecisionEngine
+from backend.governance.drift_signal import drift_signal_from_psi
 from backend.governance.policy_engine import PolicyEngine
 from backend.governance.policy_loader import PolicyLoader
 from backend.governance.risk_scoring import RiskScorer
@@ -155,7 +156,7 @@ def evaluate_policies(request: dict[str, object], policy_engine: PolicyEngine = 
 def compute_risk_score(request: RiskScoreRequest, scorer: RiskScorer = Depends(risk_scorer_dep)) -> RiskScoreResponse:
     result = scorer.score(
         probability=request.probability,
-        drift_score=request.drift_score,
+        drift_score=drift_signal_from_psi(request.raw_psi) if request.raw_psi is not None else request.drift_score,
         data_quality_score=request.data_quality_score,
         policy_penalty=request.policy_penalty,
         feature_risk_signals=request.feature_risk_signals,

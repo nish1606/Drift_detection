@@ -26,6 +26,7 @@ class RiskScoreRequest(BaseModel):
 
     probability: float
     drift_score: float = 0.0
+    raw_psi: float | None = None
     data_quality_score: float = 1.0
     policy_penalty: float = 0.0
     feature_risk_signals: dict[str, float] = Field(default_factory=dict)
