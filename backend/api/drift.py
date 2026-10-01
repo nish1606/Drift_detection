@@ -153,7 +153,7 @@ def statistical_drift(request: StatisticalDriftRequest, user: User = Depends(get
 
 @router.post("/drift/semantic")
 def semantic_drift(request: SemanticDriftRequest, user: User = Depends(get_current_active_user)) -> dict[str, float]:
-    return {"drift_score": detect_semantic_drift(request.reference_texts, request.current_texts)}
+    return {"drift_score": detect_semantic_drift(request.reference_texts, request.current_texts, mode=request.mode)}
 
 
 @router.post("/drift/data-quality")

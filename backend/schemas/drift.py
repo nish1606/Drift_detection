@@ -26,6 +26,7 @@ class SemanticDriftRequest(BaseModel):
 
     reference_texts: list[str]
     current_texts: list[str]
+    mode: str = "all_pairs"
 
 
 class DataQualityRequest(BaseModel):
