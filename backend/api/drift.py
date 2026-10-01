@@ -8,7 +8,7 @@ from uuid import uuid4
 import joblib
 import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from backend.api.deps import db_dep
@@ -40,7 +40,11 @@ class DatasetComparisonRequest(BaseModel):
 
     reference: str
     current: str
-    feature: str = "Amount"
+    #: Single feature, kept for backwards compatibility; prefer ``features``.
+    feature: str | None = None
+    #: Features to compare. Omit (or pass an empty list) to compare every
+    #: feature the two datasets share.
+    features: list[str] = Field(default_factory=list, max_length=200)
 
 
 def _dataset_paths() -> dict[str, Path]:
@@ -80,11 +84,39 @@ def compare_datasets(request: DatasetComparisonRequest, user: User = Depends(get
     current_path = dataset_path(request.current)
     if reference_path is None or current_path is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    result = compare_dataset_files(reference_path, current_path, [request.feature])
-    selected = result["features"][0] if result["features"] else None
-    if selected is None:
-        raise HTTPException(status_code=400, detail=f"Feature '{request.feature}' is not shared with usable values")
-    return {"reference": request.reference, "current": request.current, "feature": selected["feature"], "referenceRows": selected["referenceRows"], "currentRows": selected["currentRows"], "referenceMean": selected["referenceMean"], "currentMean": selected["currentMean"], "driftScore": selected["driftScore"], "bins": selected["bins"], **result}
+    requested = [feature for feature in request.features if feature]
+    if request.feature:
+        requested.append(request.feature)
+    result = compare_dataset_files(reference_path, current_path, requested or None)
+    features = result["features"]
+    if not features:
+        wanted = ", ".join(requested) if requested else "any shared feature"
+        raise HTTPException(status_code=400, detail=f"No comparable values for {wanted}")
+    payload = {
+        "reference": request.reference,
+        "current": request.current,
+        "requestedFeatures": requested or None,
+        "features": features,
+        "featureCount": len(features),
+        "overallScore": result["overallScore"],
+        "overallStatus": result["overallStatus"],
+        "sharedFeatures": result["sharedFeatures"],
+    }
+    # Preserve the single-feature response shape so existing callers keep working.
+    if len(features) == 1:
+        selected = features[0]
+        payload.update(
+            {
+                "feature": selected["feature"],
+                "referenceRows": selected["referenceRows"],
+                "currentRows": selected["currentRows"],
+                "referenceMean": selected["referenceMean"],
+                "currentMean": selected["currentMean"],
+                "driftScore": selected["driftScore"],
+                "bins": selected["bins"],
+            }
+        )
+    return payload
 
 
 @router.post("/datasets/upload")
