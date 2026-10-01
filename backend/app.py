@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,6 +61,34 @@ def _load_predictor() -> FraudPredictor:
     return predictor
 
 
+def _register_model_artifacts(store_path: str) -> None:
+    """Register on-disk artifacts so freeze/rollback have rows to operate on.
+
+    Scans the configured model store, which is where ``ml_model.train`` writes
+    ``{model_name}_{model_version}.joblib``. Each distinct name becomes a model
+    the response endpoints can freeze, unfreeze and roll back.
+    """
+    store = Path(store_path)
+    if not store.is_dir():
+        return
+    db = get_session()
+    try:
+        seen: set[tuple[str, str]] = set()
+        for artifact_path in sorted(store.glob("*.joblib")):
+            stem = artifact_path.stem
+            name, _, version = stem.rpartition("_")
+            if not name or not version or (name, version) in seen:
+                continue
+            seen.add((name, version))
+            crud.register_model_artifact(
+                db, name=name, version=version, uri=str(artifact_path.resolve())
+            )
+    except Exception as error:
+        print(f"[startup] model artifact registration error: {error}")
+    finally:
+        db.close()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or get_settings()
     configure_logging(active_settings.log_level)
@@ -73,6 +102,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        _register_model_artifacts(active_settings.model_store_path)
         app.state.fraud_predictor = _load_predictor()
         app.state.live_stream = LiveTransactionStream(interval_seconds=15, batch_size=3, predictor=app.state.fraud_predictor)
         db = get_session()

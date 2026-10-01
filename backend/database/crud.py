@@ -53,6 +53,30 @@ def get_active_model(session: Session, name: str) -> ModelArtifact:
     return artifact
 
 
+def register_model_artifact(session: Session, *, name: str, version: str, uri: str) -> ModelArtifact:
+    """Register an on-disk artifact, keeping at most one active version per name.
+
+    Freeze, unfreeze and rollback all operate on ``ModelArtifact`` rows, so an
+    artifact that exists on disk but was never registered has nothing to act on.
+    """
+    statement = select(ModelArtifact).where(ModelArtifact.name == name, ModelArtifact.version == version)
+    existing = session.scalar(statement)
+    if existing is not None:
+        existing.uri = uri
+        session.commit()
+        session.refresh(existing)
+        return existing
+    for other in session.scalars(select(ModelArtifact).where(ModelArtifact.name == name)).all():
+        if other.active:
+            other.active = False
+            other.status = "superseded"
+    artifact = ModelArtifact(name=name, version=version, uri=uri, status="active", active=True, metrics={}, schema={})
+    session.add(artifact)
+    session.commit()
+    session.refresh(artifact)
+    return artifact
+
+
 def upsert_policy(session: Session, payload: dict[str, Any]) -> GovernancePolicy:
     statement = select(GovernancePolicy).where(GovernancePolicy.name == payload["name"])
     policy = session.scalar(statement)

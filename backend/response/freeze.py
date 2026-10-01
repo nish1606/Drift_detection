@@ -104,7 +104,18 @@ class ModelResponseService:
         if len(artifacts) < 2:
             raise NotFoundError(f"no previous artifact available for '{model_name}'")
         current = next((artifact for artifact in artifacts if artifact.active), None)
-        previous = next((artifact for artifact in artifacts if not artifact.active), None)
+        # A frozen artifact was deliberately taken out of service, so it is not a
+        # valid rollback target; restore the newest version that is still eligible.
+        previous = next(
+            (
+                artifact
+                for artifact in artifacts
+                if not artifact.active
+                and artifact.status != STATUS_FROZEN
+                and (current is None or artifact.id != current.id)
+            ),
+            None,
+        )
         if previous is None:
             raise ConflictError(f"model '{model_name}' has no earlier version to roll back to")
         for artifact in artifacts:
