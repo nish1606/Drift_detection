@@ -10,6 +10,7 @@ import pandas as pd
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 
@@ -27,18 +28,18 @@ class TrainingArtifact:
 
 
 class FraudModelTrainer:
-    def __init__(self, artifact_dir: str = "ml_model/artifacts") -> None:
+    def __init__(self, artifact_dir: str = "ml_model/artifacts", scale_features: bool = False) -> None:
         self.artifact_dir = Path(artifact_dir)
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
         self.feature_engineer = FeatureEngineer()
+        self.scale_features = scale_features
 
     def _build_pipeline(self) -> Pipeline:
-        return Pipeline(
-            steps=[
-                ("vectorizer", DictVectorizer(sparse=False)),
-                ("model", LogisticRegression(max_iter=1000, class_weight="balanced")),
-            ]
-        )
+        steps = [("vectorizer", DictVectorizer(sparse=False))]
+        if self.scale_features:
+            steps.append(("scaler", StandardScaler(with_mean=False)))
+        steps.append(("model", LogisticRegression(max_iter=1000, class_weight="balanced")))
+        return Pipeline(steps=steps)
 
     def train(self, *, model_name: str, model_version: str, features: list[dict[str, Any]], labels: list[int]) -> TrainingArtifact:
         if len(features) != len(labels):
