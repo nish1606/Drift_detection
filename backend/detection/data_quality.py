@@ -17,7 +17,7 @@ class DataQualityResult:
 class DataQualityChecker:
     """Evaluate records; by default, only ``None`` counts as missing."""
 
-    def __init__(self, missing_threshold: float = 0.2, outlier_zscore: float = 3.0, treat_nan_as_missing: bool = False) -> None:
+    def __init__(self, missing_threshold: float = 0.2, outlier_zscore: float = 3.0, treat_nan_as_missing: bool = True) -> None:
         self.missing_threshold = missing_threshold
         self.outlier_zscore = outlier_zscore
         self.treat_nan_as_missing = treat_nan_as_missing
@@ -34,7 +34,11 @@ class DataQualityChecker:
             score = max(0.0, 1.0 - missing_rate)
             if missing_rate >= self.missing_threshold:
                 issues.append(f"high_missingness:{key}")
-            numeric_values = np.asarray([float(value) for value in values if isinstance(value, (int, float))], dtype=float)
+            numeric_values = np.asarray([
+                float(value)
+                for value in values
+                if isinstance(value, (int, float)) and not (self.treat_nan_as_missing and isinstance(value, float) and np.isnan(value))
+            ], dtype=float)
             if numeric_values.size > 1:
                 mean = float(np.mean(numeric_values))
                 std = float(np.std(numeric_values)) or 1.0
