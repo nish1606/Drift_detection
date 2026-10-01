@@ -85,7 +85,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = active_settings
     app.state.metrics_collector = None
-    app.add_middleware(RateLimitMiddleware, limit=60, window=60.0)
+    app.add_middleware(RateLimitMiddleware, limit=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")), window=60.0)
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(
         CORSMiddleware,
