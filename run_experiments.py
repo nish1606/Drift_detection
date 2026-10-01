@@ -37,9 +37,9 @@ BENCHMARK_FEATURES = {
 }
 
 
-def _records_without_nan(frame: pd.DataFrame) -> list[dict[str, object]]:
-    records = frame.to_dict("records")
-    return [{key: (None if isinstance(value, float) and np.isnan(value) else value) for key, value in record.items()} for record in records]
+def _records(frame: pd.DataFrame) -> list[dict[str, object]]:
+    """Return raw records; NaN handling belongs to ``FeatureEngineer``/``clean_features``."""
+    return frame.to_dict("records")
 
 GOVERNANCE_CASES = [
     ("Low risk", 0.1, 0.1, [] , "allow"),
@@ -100,7 +100,7 @@ def _fit_and_evaluate(features: list[dict[str, object]], labels: list[int], scal
 
 
 def model_results(frame: pd.DataFrame) -> dict[str, object]:
-    features = _records_without_nan(frame.drop(columns=["isFraud"]))
+    features = _records(frame.drop(columns=["isFraud"]))
     labels = frame["isFraud"].astype(int).tolist()
     with tempfile.TemporaryDirectory() as directory:
         legacy_metrics, legacy_pipeline = _fit_and_evaluate(features, labels, False, directory)
@@ -120,7 +120,7 @@ def model_results(frame: pd.DataFrame) -> dict[str, object]:
         ordered = frame.sort_values("timestamp")
         split = int(len(ordered) * 0.75)
         chronological_frame = ordered.drop(columns=["isFraud"])
-        chronological_features = _records_without_nan(chronological_frame)
+        chronological_features = _records(chronological_frame)
         chronological_labels = ordered["isFraud"].astype(int).tolist()
         chronological_engineered = [engineer.build(item) for item in chronological_features]
         pipeline = FraudModelTrainer(artifact_dir=directory)._build_pipeline()
@@ -131,7 +131,7 @@ def model_results(frame: pd.DataFrame) -> dict[str, object]:
 
 
 def explainability_results(frame: pd.DataFrame) -> dict[str, object]:
-    features = _records_without_nan(frame.drop(columns=["isFraud"]))
+    features = _records(frame.drop(columns=["isFraud"]))
     labels = frame["isFraud"].astype(int).tolist()
     with tempfile.TemporaryDirectory() as directory:
         artifact = FraudModelTrainer(artifact_dir=directory).train(model_name="experiment", model_version="1", features=features, labels=labels)
@@ -176,7 +176,7 @@ def main() -> None:
         "governance_cases": governance_results(),
         "detectors": detector_results(),
         "semantic_drift": {"legacy_all_pairs": detect_semantic_drift(["travel", "grocery"], ["travel", "grocery"]), "paired_best_match": detect_semantic_drift(["travel", "grocery"], ["travel", "grocery"], mode="paired_best_match")},
-        "data_quality": {"legacy_none_only": DataQualityChecker(treat_nan_as_missing=False).evaluate(_records_without_nan(frame.head(1000).drop(columns=["isFraud"]))).score, "nan_as_missing": DataQualityChecker(treat_nan_as_missing=True).evaluate(frame.head(1000).drop(columns=["isFraud"]).to_dict("records")).score},
+        "data_quality": {"legacy_none_only": DataQualityChecker(treat_nan_as_missing=False).evaluate(_records(frame.head(1000).drop(columns=["isFraud"]))).score, "nan_as_missing": DataQualityChecker(treat_nan_as_missing=True).evaluate(frame.head(1000).drop(columns=["isFraud"]).to_dict("records")).score},
         "models": model_results(frame),
         "explainability": explainability_results(frame),
         "package_versions": {name: importlib.metadata.version(name) for name in ("numpy", "pandas", "scikit-learn", "shap", "lime") if _package_available(name)},
