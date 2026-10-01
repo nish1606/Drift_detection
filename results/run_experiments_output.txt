@@ -1,0 +1,243 @@
+﻿
+Legacy vs new changed values
+| data quality score | 0.79646 | 0.79646 |
+| semantic drift identical sets | 0.29587585476806844 | 0.0 |
+| ROC-AUC | 0.6898603762492651 | 0.7217710170487949 |
+| precision | 0.07166853303471445 | 0.060167555217060166 |
+| recall | 0.45714285714285713 | 0.5642857142857143 |
+| F1 | 0.12391093901258471 | 0.10874053682037164 |
+| convergence warning | True | False |
+{
+  "data_quality": {
+    "legacy_none_only": 0.79646,
+    "nan_as_missing": 0.79646
+  },
+  "detectors": {
+    "concept_first_trigger": 75,
+    "constant_triggered": false,
+    "psi_drifted": true,
+    "psi_fixture": 13.122337132677574
+  },
+  "explainability": {
+    "coefficient_times_value": [
+      "amount",
+      "geo_distance",
+      "avg_amount_last_30d",
+      "numeric_count",
+      "feature_count"
+    ],
+    "lime": [
+      "avg_amount_last_30d",
+      "numeric_count",
+      "feature_count",
+      "amount",
+      "amount_log"
+    ],
+    "shap": [
+      "amount",
+      "geo_distance",
+      "avg_amount_last_30d",
+      "feature_count",
+      "numeric_count"
+    ],
+    "spearman_rank_agreement": -0.14285714285714288
+  },
+  "governance_cases": [
+    {
+      "case": "Low risk",
+      "decision": "allow",
+      "expected": "allow",
+      "matches": true
+    },
+    {
+      "case": "Moderate p",
+      "decision": "review",
+      "expected": "review",
+      "matches": true
+    },
+    {
+      "case": "Moderate combined",
+      "decision": "allow",
+      "expected": "allow",
+      "matches": true
+    },
+    {
+      "case": "High risk",
+      "decision": "block",
+      "expected": "block",
+      "matches": true
+    },
+    {
+      "case": "p>=0.95",
+      "decision": "block",
+      "expected": "block",
+      "matches": true
+    },
+    {
+      "case": "High drift",
+      "decision": "freeze",
+      "expected": "freeze",
+      "matches": true
+    },
+    {
+      "case": "Poor data quality",
+      "decision": "allow",
+      "expected": "allow",
+      "matches": true
+    },
+    {
+      "case": "Very high combined",
+      "decision": "block",
+      "expected": "block",
+      "matches": true
+    },
+    {
+      "case": "Policy block",
+      "decision": "block",
+      "expected": "block",
+      "matches": true
+    },
+    {
+      "case": "Policy review only",
+      "decision": "review",
+      "expected": "review",
+      "matches": true
+    },
+    {
+      "case": "Combined factors",
+      "decision": "review",
+      "expected": "review",
+      "matches": true
+    }
+  ],
+  "models": {
+    "chronological split on synthetic data": {
+      "confusion": [
+        [
+          2761,
+          2085
+        ],
+        [
+          36,
+          118
+        ]
+      ],
+      "f1": 0.10012728044123886,
+      "precision": 0.053563322741715845,
+      "recall": 0.7662337662337663,
+      "roc_auc": 0.7133986525237042
+    },
+    "legacy": {
+      "accuracy": 0.819,
+      "confusion": {
+        "fn": 76,
+        "fp": 829,
+        "tn": 4031,
+        "tp": 64
+      },
+      "convergence_warning": true,
+      "f1": 0.12391093901258471,
+      "precision": 0.07166853303471445,
+      "recall": 0.45714285714285713,
+      "roc_auc": 0.6898603762492651,
+      "threshold": 0.5
+    },
+    "scaled": {
+      "accuracy": 0.741,
+      "confusion": {
+        "fn": 61,
+        "fp": 1234,
+        "tn": 3626,
+        "tp": 79
+      },
+      "convergence_warning": false,
+      "f1": 0.10874053682037164,
+      "precision": 0.060167555217060166,
+      "recall": 0.5642857142857143,
+      "roc_auc": 0.7217710170487949,
+      "threshold": 0.5
+    },
+    "threshold_analysis": {
+      "0.3": {
+        "confusion": [
+          [
+            306,
+            19132
+          ],
+          [
+            3,
+            559
+          ]
+        ],
+        "f1": 0.055201698513800426,
+        "fpr": 0.9842576396748637,
+        "precision": 0.028388603930729776,
+        "recall": 0.994661921708185,
+        "roc_auc": 0.6993043673122208
+      },
+      "0.5": {
+        "confusion": [
+          [
+            16100,
+            3338
+          ],
+          [
+            303,
+            259
+          ]
+        ],
+        "f1": 0.12454917047367156,
+        "fpr": 0.17172548616112768,
+        "precision": 0.07200444815123715,
+        "recall": 0.4608540925266904,
+        "roc_auc": 0.6993043673122208
+      },
+      "0.7": {
+        "confusion": [
+          [
+            17812,
+            1626
+          ],
+          [
+            389,
+            173
+          ]
+        ],
+        "f1": 0.14654807285048707,
+        "fpr": 0.08365058133552834,
+        "precision": 0.09616453585325181,
+        "recall": 0.30782918149466193,
+        "roc_auc": 0.6993043673122208
+      },
+      "0.9": {
+        "confusion": [
+          [
+            19408,
+            30
+          ],
+          [
+            559,
+            3
+          ]
+        ],
+        "f1": 0.010084033613445379,
+        "fpr": 0.0015433686593270912,
+        "precision": 0.09090909090909091,
+        "recall": 0.005338078291814947,
+        "roc_auc": 0.6993043673122208
+      },
+      "average_precision": 0.0851995486317365
+    }
+  },
+  "package_versions": {
+    "lime": "0.2.0.1",
+    "numpy": "2.3.4",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.9.0",
+    "shap": "0.52.0"
+  },
+  "semantic_drift": {
+    "legacy_all_pairs": 0.29587585476806844,
+    "paired_best_match": 0.0
+  }
+}

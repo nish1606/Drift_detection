@@ -279,6 +279,8 @@ All endpoints are versioned under `/api/v1/...`.
 | `/api/v1/datasets` | `GET` | Yes | List available reference datasets |
 | `/api/v1/datasets/compare` | `POST` | Yes | Compare two datasets for drift |
 | `/api/v1/explainability/grad-cam` | `POST` | Yes | Tabular Grad-CAM attribution for a transaction |
+| `/api/v1/explainability/shap` | `POST` | Yes | Signed SHAP attribution for a transaction |
+| `/api/v1/explainability/lime` | `POST` | Yes | LIME attribution for a transaction |
 | `/api/v1/dashboard` | `GET` | Yes | Aggregated dashboard metrics |
 | `/api/v1/audit` | `GET` | Yes | Audit log entries |
 | `/api/v1/summary` | `GET` | Yes | Drift summary, confidence trend, concept drift events |
@@ -312,6 +314,21 @@ Tokens are obtained via `POST /api/v1/auth/login` and expire after 30 minutes. M
 ### Rate Limiting
 
 Authenticated API requests are rate-limited to **60 requests per minute per IP address**. Exceeding this limit returns HTTP `429 Too Many Requests`.
+The limit is configurable with `RATE_LIMIT_PER_MINUTE`. For benchmarks above 60 requests per minute, raise it (for example, `RATE_LIMIT_PER_MINUTE=100000`); this is a benchmarking setting only.
+
+## Governance rules
+
+Decisions are evaluated in this priority order:
+
+1. policy block/freeze -> block
+2. risk>=0.90 or drift>=0.90 -> freeze
+3. risk>=0.75 or p>=0.95 -> block
+4. risk>=0.45 or p>=0.60 -> review
+5. allow
+
+The risk formula is $R = \min(1, 0.65p + 0.20d + 0.10(1-q) + 0.05\pi + 0.10s)$, where $p$ is probability, $d$ is drift, $q$ is data quality, $\pi$ is policy penalty, and $s$ is the feature-risk signal. A policy `review` action alone does not change the decision.
+
+The system has two PSI implementations: `StatisticalDriftDetector` uses quantile bins, while `dataset_comparison` uses equal-width bins and reports `normal`, `watch`, or `high`.
 
 ## Dashboard Pages
 
@@ -364,6 +381,10 @@ The suite covers API endpoints, authentication, drift detection, explainability,
 - **Dataset comparison** uses reference datasets under `backend/data/mendeley/` for drift simulation; these are not used for model training.
 
 These are intentionally scoped out for this stage of the project and noted here for transparency.
+
+## Experiment reproduction
+
+Run `PYTHONPATH=. python run_experiments.py` to regenerate `results/experiment_results.json` and `EXPERIMENT_RESULTS.md`. The runner reports the paper-compatible legacy model and the optional scaled, threshold, chronological, semantic, data-quality, and explainability analyses side by side.
 
 
 ## License
