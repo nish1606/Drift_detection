@@ -65,11 +65,15 @@ Transaction → FastAPI /api/v1/predict → Fraud model → Prediction + confide
                (/api/v1/policies, /api/v1/decision)
                          │
                          ▼
-           Alerts · Fallback · Freeze · Retrain flag
-                         │
-                         ▼
-           Dashboard & audit log (/api/v1/dashboard, /api/v1/audit)
+Alerts · Freeze · Unfreeze · Rollback
+                          │
+                          ▼
+            Dashboard & audit log (/api/v1/dashboard, /api/v1/audit)
 ```
+
+Alerts, freeze, unfreeze and rollback are exposed over HTTP under `/api/v1/models/{model_name}/...`. Fallback and retraining are **not** wired to endpoints: a retraining job can be enqueued in-process via `RetrainingService`, and there is no automatic promotion of a new artifact.
+
+Retraining a model is still gated behind human approval; nothing in the request path swaps the serving artifact on its own.
 
 The frontend (`frontend/`) is a thin client — it reads from these APIs and renders them; all decisioning logic lives in the backend so it can be reasoned about, tested, and audited independently of the UI.
 
@@ -120,9 +124,12 @@ Drift_detection/
 ├── backend/requirements.txt # backend-specific Python dependencies
 ├── package.json             # frontend dependencies (in frontend/)
 ├── vite.config.js           # Vite config (in frontend/)
+├── package-lock.json        # root-level lockfile, NOT the frontend one
 ├── .gitignore
 └── README.md
 ```
+
+Two lockfiles exist. The frontend is built from `frontend/package.json` using `frontend/package-lock.json`; the root `package-lock.json` does not belong to the frontend build and is safe to ignore.
 
 ## Requirements
 
@@ -134,7 +141,7 @@ Drift_detection/
 
 The repository includes synthetic training data and reference datasets for drift comparison:
 
-- **Synthetic training data (included):** `backend/data/transactions_realistic.csv` ships with the repo. It contains 20,000 transactions with a 2.81% fraud class imbalance. This is the dataset the current `fraud_model.pkl` was trained on.
+- **Synthetic training data (included):** `backend/data/transactions_realistic.csv` ships with the repo. It contains 20,000 transactions with a 2.81% fraud class imbalance. This is the dataset `run_experiments.py` trains on; it writes its artifacts to `ml_model/artifacts/` rather than to a single fixed model file.
 
 - **Reference datasets for drift comparison (included):** `backend/data/mendeley/` contains temporally-matched subsets from multiple real-world fraud datasets (IEEE-CIS, PaySim, ULB). These are used by the `/datasets/compare` endpoint to simulate and measure drift against the baseline training distribution. They are **not** used for model training.
 
@@ -150,17 +157,13 @@ This requires the Kaggle CLI (`pip install kaggle`) with your API credentials co
 
 ### Backend Setup
 
-Install the backend Python dependencies from the repository root:
+Install the backend Python dependencies from the repository root. **Both files are required** — `backend/requirements.txt` does not include every import the backend makes:
 
 ```bash
-pip install -r backend/requirements.txt
+pip install -r requirements.txt -r backend/requirements.txt
 ```
 
-If you also want the root-level project dependencies:
-
-```bash
-pip install -r requirements.txt
-```
+`requirements.txt` supplies `python-jose`, `passlib[bcrypt]`, `PyYAML`, `alembic`, `python-multipart` and `httpx`, which the backend imports but which are absent from `backend/requirements.txt`. Neither file is version-pinned, so a fresh environment can resolve to different releases than the ones this project was verified against.
 
 Start the FastAPI backend:
 
@@ -263,24 +266,30 @@ All endpoints are versioned under `/api/v1/...`.
 
 | Endpoint | Method | Auth | Description |
 |---|---|---|---|
-| `/api/v1/auth/login` | `POST` | No | Login with username/password, returns JWT token |
+| `/api/v1/auth/login` | `POST` | No | Login with username/password, returns JWT token. Requires OAuth2 form encoding (`application/x-www-form-urlencoded`), not a JSON body |
 | `/api/v1/auth/register` | `POST` | No | Register a new user |
+| `/api/v1/auth/me` | `GET` | Yes | Current user profile |
 | `/api/v1/health` | `GET` | No | Service health check |
 | `/api/v1/ready` | `GET` | No | Readiness check |
-| `/api/v1/predict` | `POST` | Yes | Score a transaction and return a fraud prediction with confidence, risk score, and SHAP explanations |
+| `/api/v1/predict` | `POST` | Yes | Score a transaction and return a fraud prediction with confidence, risk score, explanations, and any alerts the decision raised |
 | `/api/v1/predictions` | `GET` | Yes | Recent prediction history |
 | `/api/v1/predictions/{prediction_id}` | `GET` | Yes | Single prediction detail |
 | `/api/v1/transactions` | `GET` | Yes | Recent transactions with mapped status and SHAP values |
 | `/api/v1/transactions/{request_id}/status` | `POST` | Yes | Update transaction review status |
-| `/api/v1/policies` | `GET` | Yes | Governance policies |
+| `/api/v1/policies` | `GET`, `POST` | Yes | List governance policies; create a policy |
 | `/api/v1/policies/history` | `GET` | Yes | Policy change history |
 | `/api/v1/policies/draft` | `POST` | Yes | Save a policy draft |
 | `/api/v1/policies/evaluate` | `POST` | Yes | Evaluate policies against current data |
 | `/api/v1/datasets` | `GET` | Yes | List available reference datasets |
-| `/api/v1/datasets/compare` | `POST` | Yes | Compare two datasets for drift |
+| `/api/v1/datasets/compare` | `POST` | Yes | Compare two datasets for drift. Accepts `features: [str]` for a chosen set; omit it to compare every shared feature, numeric and categorical |
+| `/api/v1/datasets/upload` | `POST` | Yes | Upload a CSV dataset (multipart, `.csv` only, 10 MB limit) |
 | `/api/v1/explainability/grad-cam` | `POST` | Yes | Tabular Grad-CAM attribution for a transaction |
-| `/api/v1/explainability/shap` | `POST` | Yes | Signed SHAP attribution for a transaction |
-| `/api/v1/explainability/lime` | `POST` | Yes | LIME attribution for a transaction |
+| `/api/v1/explainability/shap` | `GET`, `POST` | Yes | Signed SHAP attribution. `POST` takes `features` in the body; `GET` takes it as a JSON query parameter |
+| `/api/v1/explainability/lime` | `GET`, `POST` | Yes | LIME attribution, seeded so repeated calls agree. `POST` takes `features` in the body; `GET` takes it as a JSON query parameter |
+| `/api/v1/models/{model_name}/response-state` | `GET` | Yes | Current freeze/rollback state of a model |
+| `/api/v1/models/{model_name}/freeze` | `POST` | Yes | Freeze the active artifact; repeated freeze returns 409 |
+| `/api/v1/models/{model_name}/unfreeze` | `POST` | Yes | Return a frozen model to service |
+| `/api/v1/models/{model_name}/rollback` | `POST` | Yes | Activate the previous artifact; writes a `model.rollback` audit event |
 | `/api/v1/dashboard` | `GET` | Yes | Aggregated dashboard metrics |
 | `/api/v1/audit` | `GET` | Yes | Audit log entries |
 | `/api/v1/summary` | `GET` | Yes | Drift summary, confidence trend, concept drift events |
@@ -289,15 +298,8 @@ All endpoints are versioned under `/api/v1/...`.
 | `/api/v1/drift/data-quality` | `POST` | Yes | Evaluate data quality metrics |
 | `/api/v1/drift/concept` | `POST` | Yes | Update concept drift detector with new error values |
 | `/api/v1/metrics` | `GET` | Yes | Protected metrics (Compliance / RiskEngineer only) |
-| `/api/v1/decision` | `POST` | Yes | Record a governance decision |
+| `/api/v1/decision` | `POST` | Yes | Record a governance decision. Accepts `policy_evaluations` so the policy-block branch is reachable; reports the thresholds used |
 | `/api/v1/risk-score` | `POST` | Yes | Compute risk score for a transaction |
-| `/api/v1/summary` | `GET` | Yes | Drift summary, confidence trend, concept drift events |
-| `/api/v1/drift/statistical` | `POST` | Yes | Run statistical drift detection on provided data |
-| `/api/v1/drift/semantic` | `POST` | Yes | Run semantic/embedding drift detection |
-| `/api/v1/drift/data-quality` | `POST` | Yes | Evaluate data quality metrics |
-| `/api/v1/drift/concept` | `POST` | Yes | Update concept drift detector with new error values |
-| `/api/v1/metrics` | `GET` | Yes | Protected metrics (Compliance / RiskEngineer only) |
-| `/api/v1/decision` | `POST` | Yes | Record a governance decision |
 
 Full interactive documentation is generated automatically by FastAPI at `/docs` once the backend is running.
 
@@ -309,7 +311,7 @@ The API uses JWT bearer tokens. Include the token in the `Authorization` header:
 Authorization: Bearer <access_token>
 ```
 
-Tokens are obtained via `POST /api/v1/auth/login` and expire after 30 minutes. Most endpoints require authentication; only `/health`, `/ready`, `/auth/login`, and `/auth/register` are public.
+Tokens are obtained via `POST /api/v1/auth/login` and expire after 30 minutes. Every endpoint under `/api/v1` requires authentication except the four bootstrap endpoints — `/health`, `/ready`, `/auth/login`, and `/auth/register` — which must stay reachable before a caller can obtain a token. This is enforced per-route and again by a middleware backstop in `backend/app.py`, so a route added without an auth dependency is still rejected.
 
 ### Rate Limiting
 
@@ -376,7 +378,7 @@ The suite covers API endpoints, authentication, drift detection, explainability,
 - **Rate limiting** is per-IP, not per-token, so it is not suitable for multi-tenant production use as-is.
 - **Authorization** uses role-based access control, but there is no scoped API key system — all authenticated users have equal access to all endpoints.
 - **Explainability Loss** currently measures SHAP coverage only (presence of explanations), not explanation quality or stability over time.
-- **Model provenance** is limited: `model_meta.pkl` stores only the model version, not the training dataset name, date, or class balance. Training artifacts (`fraud_model.pkl`, `baseline_stats.pkl`, `feature_columns.pkl`) are not tracked in git.
+- **Model provenance** is limited: `model_meta.pkl` stores only the model version, not the training dataset name, date, or class balance. Training artifacts are not tracked in git. `ml_model/train.py` writes `ml_model/artifacts/{model_name}_{model_version}.joblib` (for example `fraud_classifier_probe.joblib`) alongside `baseline_stats.pkl` and `feature_columns.pkl` — there is no single canonical artifact filename, and no script promotes an artifact to a fixed backend path, so the backend's model path must be pointed at the artifact you want to serve.
 - **Grad-CAM** is available on the backend (`POST /api/v1/explainability/grad-cam`) and wired into the frontend Explainability page as a tabular attribution heatmap.
 - **Dataset comparison** uses reference datasets under `backend/data/mendeley/` for drift simulation; these are not used for model training.
 
