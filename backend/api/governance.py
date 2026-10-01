@@ -18,7 +18,7 @@ from backend.database import crud
 from backend.database.models import AuditLog, User
 from backend.governance.decision_engine import DecisionEngine
 from backend.governance.drift_signal import drift_signal_from_psi
-from backend.governance.policy_engine import PolicyEngine
+from backend.governance.policy_engine import PolicyEvaluation, PolicyEngine
 from backend.governance.policy_loader import PolicyLoader
 from backend.governance.risk_scoring import RiskScorer
 from backend.schemas.governance import (
@@ -166,10 +166,30 @@ def compute_risk_score(request: RiskScoreRequest, scorer: RiskScorer = Depends(r
 
 @router.post("/decision", response_model=DecisionResponse)
 def compute_decision(request: DecisionRequest, engine: DecisionEngine = Depends(decision_engine_dep), user: User = Depends(get_current_active_user)) -> DecisionResponse:
+    policy_evaluations = [
+        PolicyEvaluation(
+            policy_name=evaluation.policy_name,
+            action=evaluation.action,
+            passed=evaluation.passed,
+            rationale=list(evaluation.rationale) or [evaluation.action],
+        )
+        for evaluation in request.policy_evaluations
+    ]
     outcome = engine.decide(
         probability=request.probability,
         risk_score=request.risk_score,
         drift_score=request.drift_score,
+        policy_evaluations=policy_evaluations,
         feature_risk_signals=request.feature_risk_signals,
     )
-    return DecisionResponse(decision=outcome.decision, rationale=outcome.rationale, risk_score=outcome.risk_score, policy_status=outcome.policy_status)
+    return DecisionResponse(
+        decision=outcome.decision,
+        rationale=outcome.rationale,
+        risk_score=outcome.risk_score,
+        policy_status=outcome.policy_status,
+        thresholds={
+            "review_threshold": engine.review_threshold,
+            "block_threshold": engine.block_threshold,
+            "freeze_threshold": engine.freeze_threshold,
+        },
+    )

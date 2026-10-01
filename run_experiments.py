@@ -20,6 +20,7 @@ from backend.explainability.lime_service import LimeService
 from backend.explainability.shap_service import ShapService
 from backend.governance.decision_engine import DecisionEngine
 from backend.governance.policy_engine import PolicyEvaluation
+from backend.governance.risk_scoring import RiskScorer
 from ml_model.train import FraudModelTrainer
 
 ROOT = Path(__file__).resolve().parent
@@ -57,12 +58,32 @@ GOVERNANCE_CASES = [
 
 
 def governance_results() -> list[dict[str, object]]:
+    """Run the 11 governance cases through the live decision path.
+
+    ``risk`` is the risk score the case supplies to the decision engine (the
+    quantity the paper's risk column reports), while ``risk_from_scorer`` is
+    what ``RiskScorer`` derives from the same probability and drift. Both are
+    reported so the two numbers are reconciled explicitly instead of being
+    compared as if they were the same quantity.
+    """
     engine = DecisionEngine()
+    scorer = RiskScorer()
     results = []
     for case in GOVERNANCE_CASES:
         name, probability, risk, policies, expected, *drift = case
-        outcome = engine.decide(probability=probability, risk_score=risk, drift_score=drift[0] if drift else 0.0, policy_evaluations=policies)
-        results.append({"case": name, "decision": outcome.decision, "expected": expected, "matches": outcome.decision == expected})
+        drift_score = drift[0] if drift else 0.0
+        outcome = engine.decide(probability=probability, risk_score=risk, drift_score=drift_score, policy_evaluations=policies)
+        derived = scorer.score(probability=probability, drift_score=drift_score)
+        results.append({
+            "case": name,
+            "probability": probability,
+            "drift_score": drift_score,
+            "risk": risk,
+            "risk_from_scorer": round(derived["risk_score"], 6),
+            "decision": outcome.decision,
+            "expected": expected,
+            "matches": outcome.decision == expected,
+        })
     return results
 
 

@@ -39,6 +39,17 @@ class RiskScoreResponse(BaseModel):
     components: dict[str, float]
 
 
+class PolicyEvaluationRequest(BaseModel):
+    """Policy outcome supplied to the decision engine so the policy branch is reachable."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: str
+    passed: bool
+    policy_name: str = "supplied"
+    rationale: list[str] = Field(default_factory=list)
+
+
 class DecisionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -47,6 +58,9 @@ class DecisionRequest(BaseModel):
     drift_score: float = 0.0
     policy_status: str = "pass"
     feature_risk_signals: dict[str, float] = Field(default_factory=dict)
+    #: Previously unreachable over HTTP, which made the policy-block branch of
+    #: ``DecisionEngine.decide`` impossible to exercise from the API.
+    policy_evaluations: list[PolicyEvaluationRequest] = Field(default_factory=list)
 
 
 class DecisionResponse(BaseModel):
@@ -56,3 +70,4 @@ class DecisionResponse(BaseModel):
     rationale: list[str] = Field(default_factory=list)
     risk_score: float
     policy_status: str
+    thresholds: dict[str, float] = Field(default_factory=dict)
