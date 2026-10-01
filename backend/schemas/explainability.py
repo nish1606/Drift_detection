@@ -23,3 +23,10 @@ class GradCAMResponse(BaseModel):
     probability: float
     baseline: float
     attributions: list[dict[str, Any]]
+
+
+class ExplainabilityResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    method: str
+    values: dict[str, float]

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from backend.explainability.feature_importance import FeatureImportanceService
+from backend.explainability.background import training_background
 
 
 class ShapService:
@@ -13,16 +14,17 @@ class ShapService:
         try:
             import shap  # type: ignore
         except Exception:
-            importances = self.fallback.explain(model, features)
-            total = sum(abs(value) for value in importances.values()) or 1.0
-            return {key: float(value / total) for key, value in importances.items()}
+            raise ImportError("SHAP is not installed; install the optional explainability dependencies")
         if hasattr(model, "named_steps") and "vectorizer" in model.named_steps and "model" in model.named_steps:
             vectorizer = model.named_steps["vectorizer"]
             estimator = model.named_steps["model"]
+            background = vectorizer.transform(training_background())
             transformed = vectorizer.transform(features)
-            explainer = shap.Explainer(estimator, transformed)
-            values = explainer(transformed)
-            mean_abs = abs(values.values).mean(axis=0)
+            if "scaler" in model.named_steps:
+                background = model.named_steps["scaler"].transform(background)
+                transformed = model.named_steps["scaler"].transform(transformed)
+            explainer = shap.LinearExplainer(estimator, background)
+            values = explainer(transformed).values[0]
             feature_names = vectorizer.get_feature_names_out()
-            return {name: float(score) for name, score in zip(feature_names, mean_abs, strict=False)}
+            return {name: float(score) for name, score in zip(feature_names, values, strict=False)}
         return self.fallback.explain(model, features)
