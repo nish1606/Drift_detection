@@ -15,7 +15,7 @@ class DataQualityResult:
 
 
 class DataQualityChecker:
-    """Evaluate records; by default, only ``None`` counts as missing."""
+    """Evaluate records; legacy mode counts only ``None`` as missing."""
 
     def __init__(self, missing_threshold: float = 0.2, outlier_zscore: float = 3.0, treat_nan_as_missing: bool = True) -> None:
         self.missing_threshold = missing_threshold
