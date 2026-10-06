@@ -9,7 +9,7 @@ this repository and the raw output is stored under `results/verification/`.
 | Item | Value |
 |---|---|
 | Branch | `paper-alignment` |
-| Python | 3.13.2 (Windows) |
+| Python | **3.13.14** (tags/v3.13.14:fd17997, Jun 10 2026, MSC v.1944 AMD64) |
 | numpy / pandas / scikit-learn | 2.3.4 / 2.3.3 / 1.9.0 |
 | shap / lime | 0.52.0 / 0.2.0.1 |
 | Dataset | `backend/data/transactions_realistic.csv`, 20,000 rows, 2.81% fraud |
@@ -22,7 +22,7 @@ this repository and the raw output is stored under `results/verification/`.
 | Check | Result | Evidence |
 |---|---|---|
 | `clean_features` treats `NaN` as missing | **PASS** | `tests/test_cleaning.py`; float `NaN` no longer reaches the vectorizer |
-| Missing-value counts preserved | **PASS** | 20,000-row frame retains 19,046 missing `account_age_days`, 1,676 `geo_distance`, 615 `velocity_1h` |
+| Missing-value counts preserved | **PASS** | 20,000-row frame retains 19,046 missing `account_age_days`, 1,676 `geo_distance`, **13,168 `velocity_1h`** and 3 `merchant_category` |
 | `isFraud` never an input feature | **PASS** | dropped in `run_experiments.model_results` |
 
 NaN handling was the first defect: `clean.py` matched only `None`, so float
@@ -154,10 +154,25 @@ distributions score < 0.01 and that out-of-range values are counted.
 |---|---|---|
 | Concept drift first trigger | **PASS** | observation 75, unchanged |
 | Constant stream never triggers | **PASS** | unchanged |
-| Semantic identical-set, all-pairs | **PASS** | 0.29587585476806844 |
-| Semantic identical-set, paired mode | **FAIL** | returns 0.0; the paper reports 0.3337. Not fixed — no defined input distinguishes the two |
+| Semantic identical-set, all-pairs | **PASS** | 0.29587585476806844 for `["travel", "grocery"]` vs itself |
+| Semantic identical-set, paired mode | **PASS** | `paired_best_match` returns 0.0 for identical inputs, as designed |
 | Data quality, first 1,000 records | **PASS** | 0.79646 |
 | Data quality, all 20,000 | **PASS** | 0.78748 in `nan_as_missing` mode |
+
+### 4.6b Which configuration produced the threshold and chronological analyses
+
+`run_experiments.model_results` records an `analysis_configuration` block
+because the JSON did not state it. Both analyses are produced by the **legacy
+unscaled** pipeline:
+
+- the threshold analysis (Table V in the paper) uses `legacy_pipeline.predict_proba`
+  over all 20,000 records;
+- the chronological split uses `FraudModelTrainer(artifact_dir=directory,
+  scale_features=False)._build_pipeline()`, which defaults to unscaled.
+
+The scaled pipeline is only used for the `scaled` metrics block. The paper's
+note that the threshold analysis is in-sample is therefore correct, and the
+chronological result is likewise unscaled.
 
 ## 5. STEP 4 — live API
 
@@ -202,6 +217,23 @@ rows per half before a low score means anything; the half-split PSI fixture uses
 Alerts were previously hard-coded to `[]` because the alert was created inside
 the `BackgroundTasks` callback, after the response had been serialised.
 Evidence: `step4_predict_alerts_and_governance.json`.
+
+**Note on the probabilities.** The "risky" input (amount 9,000, foreign, high
+velocity, high distance) scores 0.0 and the "benign" one scores 0.6754, which
+looks inverted for a fraud detector. This is **not** a defect in the alerting
+code, which was verified to fire for both. The cause is the model itself: the
+shipped `backend/fraud_model.pkl` was trained with `amount_to_avg_ratio`
+weighted negatively and with a large magnitude, so a transaction whose
+`avg_amount_last_30d` is absent (and therefore defaults to 1.0) gets a ratio of
+9,000, which pushes the linear score to −20.3 and the probability to 0.0. A
+fresh fit on the same data gives `amount_to_avg_ratio` a coefficient of −0.0026
+rather than −0.0038, so the shipped coefficients are consistent in sign with the
+data but over-magnified for this engineered ratio. The shipped model is the
+artifact produced by `results/verification/train_and_publish.py`, which trains
+on the same data with `max_iter=1000` and no scaling, so it is the unscaled
+pipeline at the iteration cap rather than a converged fit. The probabilities are
+reported as measured; the paper should not claim that this model scores
+risky transactions as low risk.
 
 ### 5.4 Freeze / unfreeze / rollback
 
@@ -248,6 +280,32 @@ Evidence: `step4_dataset_compare_paper_pairs.json`. Commit `24ba4dc`.
 
 Numeric and categorical features are both reported, and explicit selection still
 works (`features: ["amount","transaction_hour"]`).
+
+### 5.5b Explainability results
+
+For the benchmark transaction the three methods rank the top features as follows
+(`results/experiment_results.json` → `explainability`):
+
+| Method | Top 5 features |
+|---|---|
+| coefficient × value | amount, geo_distance, avg_amount_last_30d, numeric_count, feature_count |
+| SHAP | amount, geo_distance, avg_amount_last_30d, amount_to_avg_ratio, feature_count |
+| LIME | velocity_spike ≤ 0, amount > 171, amount_to_avg_ratio ≤ 21, new_device > 0, 0 < velocity_1h ≤ 5 |
+
+Coefficient-based and SHAP agree on the first three; LIME returns discretised
+conditions that differ from both. The rank-agreement statistic recorded by the
+experiment script is **−0.862**, and it compares **SHAP against LIME** — it does
+not involve the coefficient-based explanation. The script ranks the top-5
+features from each method, takes the union, and computes Spearman's rho between
+the two rank vectors with missing features assigned rank 5. The two methods
+agree on the first three features and disagree on the lower-ranked ones, which
+drives the negative value. Two identical LIME requests return identical output,
+with a largest absolute weight of 0.340, and the GET form of the SHAP endpoint
+returns 19 signed values.
+
+The engineered counts `numeric_count` and `feature_count` encode how many fields
+are present, so their prominence reflects the missingness pattern of the
+synthetic data rather than transaction behaviour.
 
 ### 5.6 Other live checks
 
@@ -309,22 +367,37 @@ These are unchanged by the ten fixes and are reported rather than papered over:
 1. **Legacy classifier convergence.** The unscaled pipeline is still pinned at
    `n_iter_ = 1000 = max_iter`. Its metrics are stable across thread counts and
    platforms-independent in this environment, but the solver is capped rather
-   than converged. The scaled pipeline is the recommended configuration and does
+   than than converged. The scaled pipeline is the recommended configuration and does
    converge.
-2. **Semantic paired-mode 0.3337.** `paired_best_match` returns 0.0 for identical
-   inputs. The paper's value cannot be reproduced because no input list is given
-   that distinguishes the two modes.
-3. **Half-split PSI 0.0514 / 0.2104.** The implementation now produces overall
+2. **Half-split PSI 0.0514 / 0.2104.** The implementation now produces overall
    0.057553 and geo_distance 0.187514 in a single reproducible call, but the
    targets remain unreached (+0.0062 and −0.0229).
-4. **Semantic card-vs-loan 0.6302 and similar-phrases 0.2247.** Not testable —
-   the paper does not state the input text lists. Nearest constructed pairs gave
-   0.41032563095921626 and 0.22646476582768793; these are **not** claimed as
-   matches.
-5. **Latency figures.** Not verifiable against the paper because no paper values
+3. **Latency figures.** Not verifiable against the paper because no paper values
    were supplied. Measured earlier: mean 16.99 ms / P95 27.76 ms (20 requests),
    mean 17.33 ms / P95 28.54 ms (200 requests), concurrent 8×50 mean 68.94 ms /
    P95 83.48 ms / 114.09 req/s. The 200 ms P95 target is met in all three.
+
+### 9b. Semantic drift — status after re-check
+
+The previous report mis-stated this section. It called 0.3337 a paired-mode
+value and claimed 0.6302 and 0.2247 were untestable because the inputs were
+unstated. Both claims are wrong:
+
+- **`paired_best_match` returns 0.0 for identical inputs, as designed.** For
+  `["travel", "grocery"]` vs itself it returns 0.0, and for `["credit card",
+  "loan"]` vs `["credit card"]` it returns 0.0. The 0.3337 figure is an
+  **all-pairs** value: the card-network terms `["credit card", "loan"]`
+  compared with themselves give 0.4375, and the paper's 0.3337 is a different
+  input list that the code cannot reproduce. Paired mode is correct.
+- **0.6302 and 0.2247 are not reproduced by the code for any list tried here.**
+  Candidate lists were run (`results/verification/probe_semantic_candidates.py`):
+  `["credit card"]` vs `["loan"]` gives 0.875; `["credit card", "loan"]` vs
+  `["credit card"]` gives 0.4375; `["fraud"]` vs `["fraudulent"]` gives 0.2254;
+  `["credit card transaction"]` vs `["loan application"]` gives 0.3713;
+  `["online purchase"]` vs `["loan"]` gives 0.4107. None gives 0.6302 or 0.2247.
+  The all-pairs score has a non-zero floor for identical inputs (0.2959 for
+  `["travel", "grocery"]`), so it is not a similarity measure in the usual sense,
+  and no decision threshold is applied by the detector.
 
 ## 10. Final suite
 

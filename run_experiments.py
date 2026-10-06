@@ -154,11 +154,25 @@ def model_results(frame: pd.DataFrame) -> dict[str, object]:
         chronological_features = _records(chronological_frame)
         chronological_labels = ordered["isFraud"].astype(int).tolist()
         chronological_engineered = [engineer.build(item) for item in chronological_features]
-        pipeline = FraudModelTrainer(artifact_dir=directory)._build_pipeline()
+        pipeline = FraudModelTrainer(artifact_dir=directory, scale_features=False)._build_pipeline()
         pipeline.fit(chronological_engineered[:split], chronological_labels[:split])
         chronological_probabilities = pipeline.predict_proba(chronological_engineered[split:])[:, 1]
         chronological_metrics = _metrics(chronological_labels[split:], chronological_probabilities)
-    return {"legacy": legacy_metrics, "scaled": scaled_metrics, "threshold_analysis": threshold_metrics, "chronological split on synthetic data": chronological_metrics}
+    return {
+        "legacy": legacy_metrics,
+        "scaled": scaled_metrics,
+        "threshold_analysis": threshold_metrics,
+        "chronological split on synthetic data": chronological_metrics,
+        # Which configuration produced each analysis. The JSON did not state
+        # this, so callers could not tell that the threshold and chronological
+        # figures are legacy-unscaled rather than scaled.
+        "analysis_configuration": {
+            "legacy": "unscaled",
+            "scaled": "scaled",
+            "threshold_analysis": "unscaled",
+            "chronological split on synthetic data": "unscaled",
+        },
+    }
 
 
 def half_split_psi_results(frame: pd.DataFrame) -> dict[str, object]:
