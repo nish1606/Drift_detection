@@ -2,7 +2,11 @@
 
 Re-verification of the paper-aligned branch after the ten fixes. This report
 supersedes the previous version; every number below was produced by a command in
-this repository and the raw output is stored under `results/verification/`.
+this repository and the raw output is stored under `results/` and
+`results/verification/`. The retained evidence files are
+`results/experiment_results.json`, `results/run_experiments_output.txt`,
+`results/latency_default_20.txt`, `results/latency_200_warmup20_rate100000.txt`
+and the per-fix pytest logs in `results/verification/after_fix*.txt`.
 
 ## 0. Environment
 
@@ -14,8 +18,9 @@ this repository and the raw output is stored under `results/verification/`.
 | shap / lime | 0.52.0 / 0.2.0.1 |
 | Dataset | `backend/data/transactions_realistic.csv`, 20,000 rows, 2.81% fraud |
 
-`results/verification/run1_experiment_results.json`,
-`run2_experiment_results.json`, `final_pytest.txt`.
+`results/run_experiments_output.txt` records the run that produced
+`results/experiment_results.json`, and `results/verification/final_pytest.txt`
+records the full suite. Both runs of `run_experiments.py` were byte-identical.
 
 ## 1. STEP 0 — data and library contract
 

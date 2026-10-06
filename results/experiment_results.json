@@ -220,6 +220,12 @@
     "split": "row order, first half vs second half"
   },
   "models": {
+    "analysis_configuration": {
+      "chronological split on synthetic data": "unscaled",
+      "legacy": "unscaled",
+      "scaled": "scaled",
+      "threshold_analysis": "unscaled"
+    },
     "chronological split on synthetic data": {
       "confusion": [
         [
